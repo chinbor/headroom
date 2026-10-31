@@ -19,21 +19,24 @@ namespace CodeUsageMonit {
         }
         public sealed class Overview {
             public readonly List<Alert> Alerts = new List<Alert>();
-            public readonly List<ProviderState> Normal = new List<ProviderState>(), Attention = new List<ProviderState>();
+            // Loading: not read yet since the program started (not an error, nothing to show yet).
+            public readonly List<ProviderState> Normal = new List<ProviderState>(), Attention = new List<ProviderState>(), Loading = new List<ProviderState>();
+            public bool OnlyLoading { get { return Loading.Count > 0 && Alerts.Count + Normal.Count + Attention.Count == 0; } }
             public string Headline {
-                get { return Alerts.Count > 0 ? "▲ " + Alerts.Count + " 项告警" : Attention.Count > 0 ? "○ " + Attention.Count + " 项异常" : "● 全部充足"; }
+                get { return Alerts.Count > 0 ? "▲ " + Alerts.Count + " 项告警" : Attention.Count > 0 ? "○ " + Attention.Count + " 项异常" : OnlyLoading ? "正在读取额度…" : "● 全部充足"; }
             }
             // Compact form for the taskbar pill.
             public string Short {
-                get { return Alerts.Count > 0 ? "▲ " + Alerts.Count + " 告警" : Attention.Count > 0 ? "○ " + Attention.Count + " 异常" : "● 充足"; }
+                get { return Alerts.Count > 0 ? "▲ " + Alerts.Count + " 告警" : Attention.Count > 0 ? "○ " + Attention.Count + " 异常" : OnlyLoading ? "读取中" : "● 充足"; }
             }
-            public string Tone { get { return Alerts.Any(a => a.Urgent) ? "#FF6A6A" : Alerts.Count > 0 || Attention.Count > 0 ? "#FFB323" : "#25CB77"; } }
+            public string Tone { get { return Alerts.Any(a => a.Urgent) ? "#FF6A6A" : Alerts.Count > 0 || Attention.Count > 0 ? "#FFB323" : OnlyLoading ? "#8A8F98" : "#25CB77"; } }
         }
         public static double BalanceWarn = 5;
         public static Overview Classify(IEnumerable<ProviderState> input) {
             var result = new Overview();
             foreach (var state in input ?? new ProviderState[0]) {
                 if (state == null) continue;
+                if (Loading(state)) { result.Loading.Add(state); continue; }
                 if (Old(state) || state.Status != "ready" || (state.Quotas.Count == 0 && state.Balances.Count == 0)) { result.Attention.Add(state); continue; }
                 Alert worst = Items(state).OrderBy(a => a.Score).FirstOrDefault();
                 if (worst != null && worst.Score < 40) result.Alerts.Add(worst); else result.Normal.Add(state);
@@ -61,6 +64,7 @@ namespace CodeUsageMonit {
             return (b.Currency == "CNY" ? "¥" : b.Currency == "USD" ? "$" : b.Currency + " ") + b.Amount.ToString("0.##", CultureInfo.InvariantCulture);
         }
         public static Quota Tightest(ProviderState state) { return state.Quotas.OrderBy(q => q.Remaining).FirstOrDefault(); }
+        public static bool Loading(ProviderState state) { return state.Status == "loading" && state.Quotas.Count == 0 && state.Balances.Count == 0; }
         public static bool Old(ProviderState state) { return state.Stale || (state.Status != "ready" && (state.Quotas.Count > 0 || state.Balances.Count > 0)); }
         public static string ShortWindow(string label) {
             label = label ?? "";
@@ -110,7 +114,7 @@ namespace CodeUsageMonit {
             if (state.Quotas.Count == 0 && state.Balances.Count == 0) text.Append("\n").Append(Missing(state)).Append(" · 请打开订阅管理检查连接");
             DateTime at;
             if (DateTime.TryParse(state.LastSuccess, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out at)) text.Append("\n更新于 ").Append(at.ToLocalTime().ToString("M/d HH:mm"));
-            text.Append("\n点击展开详情 · 右键管理");
+            text.Append("\n点击展开详情");
             return text.ToString();
         }
     }

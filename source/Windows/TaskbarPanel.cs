@@ -115,7 +115,10 @@ namespace CodeUsageMonit {
                 Click += delegate { click(); };
                 MouseEnter += delegate { hover = true; Render(); if (HoverChanged != null) HoverChanged(true); };
                 MouseLeave += delegate { hover = false; Render(); if (HoverChanged != null) HoverChanged(false); };
+                spinner = new Forms.Timer { Interval = 60 }; spinner.Tick += delegate { spin = (spin + 24) % 360; Render(); };
             }
+            // While nothing has been read yet, an arc turns around the logo.
+            private readonly Forms.Timer spinner; private int spin;
             protected override Forms.CreateParams CreateParams {
                 get { var p = base.CreateParams; p.Parent = parent; p.Style = (p.Style | 0x40000000 | 0x04000000) & unchecked((int)~0x80000000); p.ExStyle |= 0x08000000 | 0x00080000; return p; }
             }
@@ -130,13 +133,16 @@ namespace CodeUsageMonit {
                 if (m.Msg == 0x21) { m.Result = new IntPtr(3); return; }
                 if (m.Msg == 0x201 || m.Msg == 0x204) { m.Result = IntPtr.Zero; return; }
                 if (m.Msg == 0x202 || m.Msg == 0xF5) { OnClick(EventArgs.Empty); m.Result = IntPtr.Zero; return; }
-                if (m.Msg == 0x205 || m.Msg == 0x7B) { Context(); m.Result = IntPtr.Zero; return; }
+                // Right-click does nothing on the summary; the tray icon keeps the menu.
+                if (m.Msg == 0x205 || m.Msg == 0x7B) { m.Result = IntPtr.Zero; return; }
                 base.WndProc(ref m);
             }
             // Per-pixel alpha: only text, logos and rings are opaque. Every pixel keeps alpha >= 1,
             // because fully transparent pixels of a layered window let clicks fall through.
             public bool Render() {
                 if (!IsHandleCreated || Width <= 0 || Height <= 0) return true;
+                Pace.Focus focus = Pace.Primary(Data, DateTime.UtcNow); bool loading = focus != null && focus.Loading;
+                if (loading != spinner.Enabled) spinner.Enabled = loading;
                 using (var bitmap = new Drawing.Bitmap(Width, Height, Drawing.Imaging.PixelFormat.Format32bppArgb)) {
                     bitmap.SetResolution(dpi, dpi);
                     using (var g = Drawing.Graphics.FromImage(bitmap)) { g.Clear(Drawing.Color.FromArgb(1, 0, 0, 0)); Draw(g, Width, Height); }
@@ -175,13 +181,18 @@ namespace CodeUsageMonit {
             }
             public void Draw(Drawing.Graphics g, int width, int height) {
                 g.SmoothingMode = Gdi.SmoothingMode.AntiAlias; g.TextRenderingHint = Drawing.Text.TextRenderingHint.AntiAliasGridFit; g.InterpolationMode = Gdi.InterpolationMode.HighQualityBicubic;
-                if (hover || Expanded) using (var path = Rounded(new Drawing.RectangleF(1, 3, width - 2, height - 6), Px(5))) using (var fill = new Drawing.SolidBrush(Faint(Light ? 20 : 26))) g.FillPath(fill, path);
+                if (hover) using (var path = Rounded(new Drawing.RectangleF(1, 3, width - 2, height - 6), Px(5))) using (var fill = new Drawing.SolidBrush(Faint(Light ? 20 : 26))) g.FillPath(fill, path);
                 Pace.Focus f = Pace.Primary(Data, DateTime.UtcNow); Plan plan = Layout(width);
                 int mid = height / 2, x = 6, icon = Px(18);
                 var rings = Others(f);
                 if (plan.Primary) {
                     if (f == null) { Label(g, "还没有订阅", body, Dim, new Drawing.RectangleF(x, 0, width - 12, height)); return; }
-                    Logo(g, f.State, x, mid - icon / 2, icon);
+                    if (f.Loading) {
+                        int d = icon + Px(6);
+                        using (var track = new Drawing.Pen(Faint(40), Px(2))) g.DrawEllipse(track, x - Px(3), mid - d / 2, d, d);
+                        using (var arc = new Drawing.Pen(Dim, Px(2)) { StartCap = Gdi.LineCap.Round, EndCap = Gdi.LineCap.Round }) g.DrawArc(arc, x - Px(3), mid - d / 2, d, d, spin - 90, 90);
+                        Logo(g, f.State, x + Px(2), mid - (icon - Px(4)) / 2, icon - Px(4));
+                    } else Logo(g, f.State, x, mid - icon / 2, icon);
                     int tx = x + Px(24), room = PrimaryWidth(f) - Px(24), vw = f.Value.Length > 0 ? Measure(f.Value, bold) : 0;
                     int tw = Math.Max(0, Math.Min(Measure(f.Title, body), room - (vw > 0 ? vw + 5 : 0)));
                     int line = Px(17);
@@ -219,7 +230,7 @@ namespace CodeUsageMonit {
                 Logo(g, s, x + 5, y + 5, 12);
             }
             protected override void Dispose(bool disposing) {
-                if (disposing) { body.Dispose(); bold.Dispose(); small.Dispose(); tiny.Dispose(); if (measure != null) { measure.Dispose(); measureBitmap.Dispose(); } foreach (var image in Logos.Values) if (image != null) image.Dispose(); Logos.Clear(); }
+                if (disposing) { spinner.Dispose(); body.Dispose(); bold.Dispose(); small.Dispose(); tiny.Dispose(); if (measure != null) { measure.Dispose(); measureBitmap.Dispose(); } foreach (var image in Logos.Values) if (image != null) image.Dispose(); Logos.Clear(); }
                 base.Dispose(disposing);
             }
         }

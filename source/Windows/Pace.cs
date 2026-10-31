@@ -42,7 +42,7 @@ namespace CodeUsageMonit {
         // The single most pressing item, for the taskbar's two-line focus: the window that runs
         // out soonest at the current rate, else the lowest remaining (or balance score).
         public sealed class Focus {
-            public ProviderState State; public string Title = "", Value = "", Sub = ""; public double? Score; public bool Alert;
+            public ProviderState State; public string Title = "", Value = "", Sub = ""; public double? Score; public bool Alert, Loading;
         }
         public static Focus Primary(IEnumerable<ProviderState> states, DateTime nowUtc) {
             var list = (states ?? Enumerable.Empty<ProviderState>()).Where(s => s != null).ToList();
@@ -56,7 +56,12 @@ namespace CodeUsageMonit {
                 return new Focus { State = balance.State, Title = SubscriptionView.Name(balance.State.Id) + " 余额", Value = SubscriptionView.Money(balance.Balance), Score = balance.Score, Sub = "余额" + (balance.Score < 20 ? "告急" : balance.Score < 40 ? "偏紧" : "充足"), Alert = balance.Score < 40 };
             var pick = running ?? lowest;
             if (pick == null) {
-                ProviderState odd = list.FirstOrDefault(s => !live.Contains(s)) ?? list[0];
+                // Nothing read yet since the program started: say so, without alarm.
+                if (list.All(s => live.Contains(s) || SubscriptionView.Loading(s))) {
+                    ProviderState first = list.FirstOrDefault(SubscriptionView.Loading) ?? list[0];
+                    return new Focus { State = first, Title = SubscriptionView.Name(first.Id), Sub = "正在读取额度…", Loading = true };
+                }
+                ProviderState odd = list.FirstOrDefault(s => !live.Contains(s) && !SubscriptionView.Loading(s)) ?? list[0];
                 return new Focus { State = odd, Title = SubscriptionView.Name(odd.Id), Sub = SubscriptionView.Old(odd) ? "旧读数" : "读取异常", Alert = true };
             }
             var f = new Focus { State = pick.State, Title = SubscriptionView.Name(pick.State.Id) + " " + SubscriptionView.AlertWindow(pick.Quota.Label), Value = pick.Quota.Remaining.ToString("0.#", CultureInfo.InvariantCulture) + "%", Score = pick.Quota.Remaining };
@@ -76,6 +81,7 @@ namespace CodeUsageMonit {
             var overview = SubscriptionView.Classify(list);
             var shortest = list.Where(s => !SubscriptionView.Old(s)).SelectMany(s => s.Quotas.Select(q => new { State = s, Quota = q, Pace = Of(q, nowUtc) }))
                 .Where(x => x.Pace != null && x.Pace.Short && x.Quota.Remaining > 0).OrderBy(x => x.Pace.RunOut.Value).FirstOrDefault();
+            if (overview.OnlyLoading) return "正在读取额度…";
             int attention = overview.Alerts.Count + overview.Attention.Count;
             string head = attention == 0 ? "全部充足" : attention + " 项需要注意";
             if (shortest != null) return head + " · " + SubscriptionView.Name(shortest.State.Id) + " " + SubscriptionView.AlertWindow(shortest.Quota.Label) + " 预计 " + Span(shortest.Pace.RunOut.Value) + "后用完";

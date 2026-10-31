@@ -58,7 +58,7 @@ irm https://raw.githubusercontent.com/chinbor/headroom/main/install.ps1 | iex
 
 ## 上手
 
-1. 启动后，任务栏托盘左边会出现摘要，托盘区也有图标。单击摘要或托盘图标打开“额度与消耗”窗口，右键打开菜单。
+1. 启动后，任务栏托盘左边会出现摘要，托盘区也有图标。单击摘要或托盘图标打开“额度与消耗”窗口。
 2. Claude、Codex 在各自的客户端里登录过就能直接读到。
 3. DeepSeek、Agnes：打开 设置 →“添加订阅”，点“登录添加”，在弹出的页面里登录即可。
 4. 想先看效果，运行 `codeusagemonit.exe --demo`：使用演示数据，不读取账户、不联网，也不改动正式设置。

@@ -201,6 +201,13 @@ namespace CodeUsageMonit {
                 var calm = new ProviderState { Id = "claude", Status = "ready" }; calm.Quotas.Add(slow);
                 Require(Pace.Headline(new[] { codex, calm }, now).StartsWith("1 项需要注意 · Codex 5 小时 预计 38 分钟后用完"));
                 Require(Pace.Headline(new[] { calm }, now) == "全部充足，照现在的速度都撑得到重置");
+                // Before the first read: loading, not an error.
+                var fresh = new ProviderState { Id = "deepseek" };
+                Pace.Focus waiting = Pace.Primary(new[] { fresh, new ProviderState { Id = "agnes" } }, now);
+                Require(waiting.Loading && !waiting.Alert && waiting.Sub == "正在读取额度…");
+                var overview = SubscriptionView.Classify(new[] { fresh });
+                Require(overview.OnlyLoading && overview.Attention.Count == 0 && Pace.Headline(new[] { fresh }, now) == "正在读取额度…");
+                Require(!Pace.Primary(new[] { fresh, calm }, now).Loading && Pace.Headline(new[] { fresh, calm }, now).StartsWith("全部充足"));
             });
             test("Balance ledger: drops are spend on that day, rises are top-ups, first reading is a baseline", () => {
                 var l = new BalanceLedger(); var day1 = new DateTime(2026, 10, 30, 9, 0, 0); var day2 = new DateTime(2026, 10, 31, 9, 0, 0);

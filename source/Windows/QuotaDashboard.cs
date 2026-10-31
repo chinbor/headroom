@@ -60,7 +60,7 @@ namespace CodeUsageMonit {
             // An opaque window without a system caption (WindowChrome), not a transparent layered one:
             // Windows draws the rounded corners and the shadow, maximize and minimize animate like any
             // window, and rendering stays on the GPU instead of being redrawn in software.
-            view = new Window { Title = "余量 · 额度与消耗", Width = 880, Height = 640, MinWidth = 520, MinHeight = 360, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.CanResize, ShowInTaskbar = true, FontFamily = new FontFamily(Theme.Font), Content = frame };
+            view = new Window { Title = "余量 · 额度与消耗", Width = 880, Height = 640, MinWidth = 520, MinHeight = 360, WindowStyle = WindowStyle.SingleBorderWindow, ResizeMode = ResizeMode.CanResize, ShowInTaskbar = true, FontFamily = new FontFamily(Theme.Font), Content = frame };
             System.Windows.Shell.WindowChrome.SetWindowChrome(view, new System.Windows.Shell.WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new Thickness(6), GlassFrameThickness = new Thickness(0, 0, 0, 1), CornerRadius = new CornerRadius(0), UseAeroCaptionButtons = false });
             ApplyTheme();
             view.SourceInitialized += delegate {
@@ -79,12 +79,14 @@ namespace CodeUsageMonit {
             };
             // Windows switching light/dark mode or accent colour repaints everything, settings included.
             Theme.Watch(view.Dispatcher); Theme.Changed += delegate { ApplyTheme(); if (view.IsVisible) Render(); };
-            // Rebuilding the page follows a maximize or restore at once, a drag-resize once it pauses.
-            resized = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) }; resized.Tick += delegate { resized.Stop(); if (view.IsVisible) Render(); };
+            // A new size only re-lays out the page (cheap, so maximize and restore keep their animation);
+            // the page is rebuilt only when the width crosses one of its layout breakpoints, and then
+            // after the size settles (a drag pauses, the maximize animation ends).
+            resized = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) }; resized.Tick += delegate { resized.Stop(); if (view.IsVisible && Layout(view.ActualWidth) != renderedLayout) Render(); };
             view.SizeChanged += delegate {
                 if (!view.IsVisible) return;
-                if (stateChanged) { stateChanged = false; resized.Stop(); Render(); }
-                else if (Math.Abs(view.ActualWidth - renderedWidth - 30) > 2) { resized.Stop(); resized.Start(); }
+                if (stateChanged) { stateChanged = false; RenderBar(); }
+                resized.Stop(); if (Layout(view.ActualWidth) != renderedLayout) resized.Start();
             };
             view.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Escape) view.Hide(); else if (e.Key == Key.F5) { var ignored = RunRefresh(); } };
             view.Closing += delegate(object sender, System.ComponentModel.CancelEventArgs e) { if (!disposed) { e.Cancel = true; view.Hide(); } };
@@ -121,8 +123,40 @@ namespace CodeUsageMonit {
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
         private bool stateChanged;
         private DispatcherTimer resized;
+        // Widths (after zoom) at which the page arranges itself differently; between two of them
+        // WPF's own layout follows the window.
+        private static readonly double[] Breakpoints = { 600, 640, 720, 760, 900, 1100, 1300 };
+        private static double Zoom(double raw) { return raw >= 1900 ? 1.25 : raw >= 1500 ? 1.12 : 1; }
+        private string renderedLayout = "";
+        private string Layout(double windowWidth) {
+            double raw = windowWidth - 30 - frame.Margin.Left - frame.Margin.Right, zoom = Zoom(raw), width = Math.Max(480, raw / zoom);
+            return zoom + "|" + Breakpoints.Count(b => width >= b) + "|" + (windowWidth < 640);
+        }
         private bool Maximized { get { return view.WindowState == WindowState.Maximized; } }
         private void ToggleLarge() { view.WindowState = Maximized ? WindowState.Normal : WindowState.Maximized; }
+        // Opening shows a window WPF has not drawn yet (white, whatever the class brush says): DWM
+        // cloaks it until a few frames after the page is built, so it appears already painted.
+        // A timer uncloaks it in any case.
+        private int cloakFrames;
+        private DispatcherTimer uncloak;
+        private void Cloak() {
+            IntPtr handle = new WindowInteropHelper(view).EnsureHandle();
+            if (!SetCloak(handle, true)) return;
+            if (cloakFrames == 0) CompositionTarget.Rendering += CountFrame;
+            cloakFrames = 3;
+            if (uncloak == null) { uncloak = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) }; uncloak.Tick += delegate { Uncloak(); }; }
+            uncloak.Stop(); uncloak.Start();
+        }
+        private void CountFrame(object sender, EventArgs e) { if (--cloakFrames <= 0) Uncloak(); }
+        private void Uncloak() {
+            CompositionTarget.Rendering -= CountFrame; cloakFrames = 0; if (uncloak != null) uncloak.Stop();
+            SetCloak(new WindowInteropHelper(view).Handle, false);
+        }
+        private static bool SetCloak(IntPtr handle, bool on) {
+            if (handle == IntPtr.Zero) return false;
+            int value = on ? 1 : 0;   // DWMWA_CLOAK
+            try { return DwmSetWindowAttribute(handle, 13, ref value, 4) == 0; } catch (DllNotFoundException) { return false; } catch (EntryPointNotFoundException) { return false; }
+        }
         private void ApplyTheme() {
             view.Resources = Theme.Styles(); view.Foreground = Ink; view.Background = Theme.Window; frame.Background = Theme.Window;
             var hwnd = PresentationSource.FromVisual(view) as HwndSource; if (hwnd != null) PaintBase(hwnd);
@@ -217,6 +251,7 @@ namespace CodeUsageMonit {
             double scale = source == null || source.CompositionTarget == null ? 1 : source.CompositionTarget.TransformToDevice.M11;
             if (!Maximized) { view.Width = Math.Max(520, Math.Min(view.Width, area.Width / scale - 48)); view.Height = Math.Max(360, Math.Min(view.Height, area.Height / scale - 48)); }
             bool opening = !view.IsVisible;
+            if (opening) Cloak();
             Render();
             if (opening && !Maximized) {
                 if (tab == "quota") FitHeight(area.Height / scale - 48);
@@ -241,9 +276,9 @@ namespace CodeUsageMonit {
             try {
                 // A wide (maximized) window enlarges everything a step instead of leaving tiny text in empty space.
                 double raw = (view.ActualWidth > 0 ? view.ActualWidth : view.Width) - 30 - frame.Margin.Left - frame.Margin.Right;
-                double zoom = raw >= 1900 ? 1.25 : raw >= 1500 ? 1.12 : 1;
+                double zoom = Zoom(raw);
                 content.LayoutTransform = zoom == 1 ? Transform.Identity : new ScaleTransform(zoom, zoom);
-                renderedWidth = Math.Max(480, raw / zoom);
+                renderedWidth = Math.Max(480, raw / zoom); renderedLayout = Layout(view.ActualWidth > 0 ? view.ActualWidth : view.Width);
                 RenderBar(); content.Children.Clear();
                 if (tab == "usage") RenderUsage(); else if (tab == "settings") content.Children.Add(settingsView()); else RenderQuota();
             } finally { rendering = false; }
@@ -493,7 +528,7 @@ namespace CodeUsageMonit {
             List<ProviderState> states = readings(); DateTime now = DateTime.UtcNow;
             var overview = SubscriptionView.Classify(states);
             bool urgent = overview.Alerts.Any(v => v.Urgent);
-            string headHex = urgent ? Theme.UrgentHex : overview.Alerts.Count > 0 || overview.Attention.Count > 0 ? Theme.WarnHex : Theme.GoodHex;
+            string headHex = urgent ? Theme.UrgentHex : overview.Alerts.Count > 0 || overview.Attention.Count > 0 ? Theme.WarnHex : overview.OnlyLoading ? Theme.UnknownHex : Theme.GoodHex;
             // One sentence first: what needs attention and how soon.
             var head = new DockPanel();
             DateTime latest = DateTime.MinValue; foreach (ProviderState s in states) { DateTime at; if (DateTime.TryParse(s.LastSuccess, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out at) && at.ToUniversalTime() > latest) latest = at.ToUniversalTime(); }
