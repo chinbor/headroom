@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="16" fill="#13161c"/>
-  <rect x="0.5" y="0.5" width="63" height="63" rx="15.5" stroke="rgba(255,255,255,0.08)"/>
-  <!-- Three bar meters -->
-  <rect x="15" y="32" width="8" height="19" rx="3" fill="#6DE0D6"/>
-  <rect x="28" y="16" width="8" height="35" rx="3" fill="#96D9EE"/>
-  <rect x="41" y="24" width="8" height="27" rx="3" fill="#D6C1F9"/>
+  <rect width="64" height="64" rx="15" fill="#1E2127"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="14.5" stroke="rgba(255,255,255,0.08)"/>
+  <!-- 余量 Headroom: green for what is left, white dot where even use would be now -->
+  <circle cx="32" cy="32" r="17" stroke="#3E434F" stroke-width="8"/>
+  <circle cx="32" cy="32" r="17" stroke="#34C778" stroke-width="8" stroke-linecap="round" stroke-dasharray="69.4 106.8" transform="rotate(-90 32 32)"/>
+  <circle cx="48.07" cy="37.53" r="4.2" fill="#F0F2F6"/>
 </svg>
