@@ -71,9 +71,14 @@ namespace CodeUsageMonit {
         public static string DimHex { get { return Dark ? "#949EAD" : "#5E6977"; } }
         public static string AccentHex { get { return Hex(AccentColor); } }
         public static string AccentInkHex { get { return Luma(AccentColor) > 165 ? "#111317" : "#FFFFFF"; } }
-        public static string GoodHex { get { return Dark ? "#2BC97A" : "#14874A"; } }
-        public static string WarnHex { get { return Dark ? "#F5A524" : "#B26A00"; } }
-        public static string UrgentHex { get { return Dark ? "#F2645F" : "#D23B36"; } }
+        // Status colours after the Fluent system palette (success, caution, critical), shared by the
+        // window, the flyout and the taskbar summary. level: 0 critical, 1 caution, 2 success.
+        public static string Status(bool light, int level) {
+            return level == 0 ? (light ? "#C42B1C" : "#FF7B72") : level == 1 ? (light ? "#9D5D00" : "#F2C14E") : (light ? "#0F7B0F" : "#6CCB5F");
+        }
+        public static string GoodHex { get { return Status(!Dark, 2); } }
+        public static string WarnHex { get { return Status(!Dark, 1); } }
+        public static string UrgentHex { get { return Status(!Dark, 0); } }
         public static string UnknownHex { get { return Dark ? "#818891" : "#7A828C"; } }
         // Status colour for a remaining share (or balance score): <20 urgent, <40 tight.
         public static string Tone(double? remaining) { return !remaining.HasValue ? UnknownHex : remaining < 20 ? UrgentHex : remaining < 40 ? WarnHex : GoodHex; }

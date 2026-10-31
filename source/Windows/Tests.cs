@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -90,7 +90,7 @@ namespace CodeUsageMonit {
                     foreach (var k in cases) {
                         TaskbarPanel.Plan plan;
                         using (var image = TaskbarPanel.Preview(k.Data, k.W, k.H, k.Back, out plan)) {
-                            Require(plan.Width <= Math.Min(k.W, 320 * Math.Max(.75, k.H / 48.0)) + 1 && image.Width == plan.Width);
+                            Require(plan.Width <= Math.Min(k.W, 350 * Math.Max(.75, k.H / 48.0)) + 1 && image.Width == plan.Width);
                             using (var strip = new System.Drawing.SolidBrush(k.Back)) g.FillRectangle(strip, 140, y + 2, 500, k.H);
                             g.DrawImage(image, 140 + 500 - image.Width, y + 2);
                             g.DrawString(k.Name + "\n" + (plan.Primary ? "焦点+" : "") + plan.Rings + " 环" + (plan.More > 0 ? " +" + plan.More : ""), font, System.Drawing.Brushes.Gainsboro, 6, y + 4);

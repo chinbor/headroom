@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -71,7 +71,7 @@ namespace CodeUsageMonit {
         // Draws the summary into a bitmap with no window (self-test gallery of edge cases).
         public static Drawing.Bitmap Preview(List<ProviderState> data, int width, int height, Drawing.Color back, out Plan plan) {
             using (var button = new HostedButton(IntPtr.Zero, delegate { }, delegate { })) {
-                button.Data = data; button.Back = back; button.Cap = (int)Math.Round(320 * Math.Max(.75, height / 48.0));
+                button.Data = data; button.Back = back; button.Cap = (int)Math.Round(350 * Math.Max(.75, height / 48.0));
                 plan = button.Layout(width);
                 var bitmap = new Drawing.Bitmap(plan.Width, height, Drawing.Imaging.PixelFormat.Format32bppArgb);
                 using (var g = Drawing.Graphics.FromImage(bitmap)) { g.Clear(back); button.Draw(g, plan.Width, height); }
@@ -80,19 +80,19 @@ namespace CodeUsageMonit {
         }
         private sealed class HostedButton : Forms.Button {
             private readonly IntPtr parent;
-            private readonly Drawing.Font body = new Drawing.Font("Microsoft YaHei UI", 8.4f);
-            private readonly Drawing.Font bold = new Drawing.Font("Microsoft YaHei UI", 8.4f, Drawing.FontStyle.Bold);
-            private readonly Drawing.Font small = new Drawing.Font("Microsoft YaHei UI", 7.4f);
-            private readonly Drawing.Font tiny = new Drawing.Font("Microsoft YaHei UI", 6.6f, Drawing.FontStyle.Bold);
+            private readonly Drawing.Font body = new Drawing.Font("Microsoft YaHei UI", 9f);
+            private readonly Drawing.Font bold = new Drawing.Font("Microsoft YaHei UI", 9f, Drawing.FontStyle.Bold);
+            private readonly Drawing.Font small = new Drawing.Font("Microsoft YaHei UI", 8.4f);
+            private readonly Drawing.Font tiny = new Drawing.Font("Microsoft YaHei UI", 7f, Drawing.FontStyle.Bold);
             private static readonly Drawing.StringFormat Typo = new Drawing.StringFormat(Drawing.StringFormat.GenericTypographic) { Trimming = Drawing.StringTrimming.EllipsisCharacter, LineAlignment = Drawing.StringAlignment.Center, FormatFlags = Drawing.StringFormatFlags.NoWrap | Drawing.StringFormatFlags.MeasureTrailingSpaces };
             private Drawing.Bitmap measureBitmap; private Drawing.Graphics measure; private float dpi = 96;
             private bool hover;
             public List<ProviderState> Data = new List<ProviderState>();
             public bool Expanded;
             // Widest the summary may grow (physical pixels); it never fills the whole free gap.
-            public int Cap = 320;
+            public int Cap = 350;
             // The focus item's text never takes more than this, so a long platform name cannot push the rings out.
-            private const int TextCap = 150;
+            private const int TextCap = 170;
             // The taskbar's colour next to the summary, sampled only to pick dark or light ink: the
             // summary itself is transparent and the taskbar's own material shows through.
             public Drawing.Color Back = Drawing.Color.FromArgb(32, 32, 32);
@@ -101,9 +101,9 @@ namespace CodeUsageMonit {
             private Drawing.Color Dim { get { return Light ? Color("#5B6170") : Color("#AEB5C2"); } }
             private Drawing.Color Faint(int alpha) { return Drawing.Color.FromArgb(alpha, Ink); }
             private static double Luma(Drawing.Color c) { return .299 * c.R + .587 * c.G + .114 * c.B; }
-            private Drawing.Color Urgent { get { return Light ? Color("#C62828") : Color("#FF6A6A"); } }
-            private Drawing.Color Warn { get { return Light ? Color("#9A5F00") : Color("#FFB323"); } }
-            private Drawing.Color Good { get { return Light ? Color("#16794A") : Color("#25CB77"); } }
+            private Drawing.Color Urgent { get { return Color(Theme.Status(Light, 0)); } }
+            private Drawing.Color Warn { get { return Color(Theme.Status(Light, 1)); } }
+            private Drawing.Color Good { get { return Color(Theme.Status(Light, 2)); } }
             private Drawing.Color Tone(double? score) { return !score.HasValue ? Dim : score < 20 ? Urgent : score < 40 ? Warn : Good; }
             public readonly Dictionary<string, Drawing.Bitmap> Logos = new Dictionary<string, Drawing.Bitmap>();
             private readonly Action Context;
@@ -165,7 +165,7 @@ namespace CodeUsageMonit {
             private int PrimaryWidth(Pace.Focus f) {
                 if (f == null) return Measure("还没有订阅", body) + 4;
                 int title = Measure(f.Title, body) + (f.Value.Length > 0 ? 5 + Measure(f.Value, bold) : 0);
-                return Px(22) + Math.Min(Px(TextCap), Math.Max(title, Measure(f.Sub, small))) + 2;
+                return Px(24) + Math.Min(Px(TextCap), Math.Max(title, Measure(f.Sub, small))) + 2;
             }
             // The platforms drawn as rings: all but the focus one, tightest first.
             private List<ProviderState> Others(Pace.Focus f) { return Data.Where(s => f == null || s != f.State).OrderBy(s => Pace.Score(s) ?? 999).ToList(); }
@@ -177,14 +177,14 @@ namespace CodeUsageMonit {
                 g.SmoothingMode = Gdi.SmoothingMode.AntiAlias; g.TextRenderingHint = Drawing.Text.TextRenderingHint.AntiAliasGridFit; g.InterpolationMode = Gdi.InterpolationMode.HighQualityBicubic;
                 if (hover || Expanded) using (var path = Rounded(new Drawing.RectangleF(1, 3, width - 2, height - 6), Px(5))) using (var fill = new Drawing.SolidBrush(Faint(Light ? 20 : 26))) g.FillPath(fill, path);
                 Pace.Focus f = Pace.Primary(Data, DateTime.UtcNow); Plan plan = Layout(width);
-                int mid = height / 2, x = 6, icon = Px(16);
+                int mid = height / 2, x = 6, icon = Px(18);
                 var rings = Others(f);
                 if (plan.Primary) {
                     if (f == null) { Label(g, "还没有订阅", body, Dim, new Drawing.RectangleF(x, 0, width - 12, height)); return; }
                     Logo(g, f.State, x, mid - icon / 2, icon);
-                    int tx = x + Px(22), room = PrimaryWidth(f) - Px(22), vw = f.Value.Length > 0 ? Measure(f.Value, bold) : 0;
+                    int tx = x + Px(24), room = PrimaryWidth(f) - Px(24), vw = f.Value.Length > 0 ? Measure(f.Value, bold) : 0;
                     int tw = Math.Max(0, Math.Min(Measure(f.Title, body), room - (vw > 0 ? vw + 5 : 0)));
-                    int line = Px(15);
+                    int line = Px(17);
                     Label(g, f.Title, body, Ink, new Drawing.RectangleF(tx, mid - line, tw + 1, line));
                     if (vw > 0) Label(g, f.Value, bold, Tone(f.Score), new Drawing.RectangleF(tx + tw + 5, mid - line, vw + 2, line));
                     Label(g, f.Sub, small, f.Alert ? Tone(Math.Min(f.Score ?? 30, 30)) : Dim, new Drawing.RectangleF(tx, mid + 1, room, line - 1));
@@ -302,7 +302,7 @@ namespace CodeUsageMonit {
                 host.Data = readings; host.Expanded = expanded();
                 Drawing.Color back; if (SampleTaskbar(slot.Area, out back)) host.Back = back;
                 var overview = SubscriptionView.Classify(readings);
-                host.Cap = (int)Math.Round(320 * Math.Max(.75, (slot.Area.Height + 6) / 48));
+                host.Cap = (int)Math.Round(350 * Math.Max(.75, (slot.Area.Height + 6) / 48));
                 int width = host.Layout((int)slot.Area.Width).Width;
                 Note = "";
                 // Hovering shows the themed flyout (TaskbarFlyout); the text stays for screen readers.

@@ -64,7 +64,8 @@ namespace CodeUsageMonit {
             System.Windows.Shell.WindowChrome.SetWindowChrome(view, new System.Windows.Shell.WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new Thickness(6), GlassFrameThickness = new Thickness(0, 0, 0, 1), CornerRadius = new CornerRadius(0), UseAeroCaptionButtons = false });
             ApplyTheme();
             view.SourceInitialized += delegate {
-                IntPtr handle = new WindowInteropHelper(view).Handle; HwndSource.FromHwnd(handle).AddHook(MaxToWorkArea);
+                IntPtr handle = new WindowInteropHelper(view).Handle; var hwnd = HwndSource.FromHwnd(handle); hwnd.AddHook(MaxToWorkArea);
+                PaintBase(hwnd);
                 // WS_MINIMIZEBOX, so the taskbar button minimizes and restores it like any window.
                 SetWindowLong(handle, -16, GetWindowLong(handle, -16) | 0x20000);
                 // Rounded corners on Windows 11 (DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND); ignored before.
@@ -122,7 +123,23 @@ namespace CodeUsageMonit {
         private DispatcherTimer resized;
         private bool Maximized { get { return view.WindowState == WindowState.Maximized; } }
         private void ToggleLarge() { view.WindowState = Maximized ? WindowState.Normal : WindowState.Maximized; }
-        private void ApplyTheme() { view.Resources = Theme.Styles(); view.Foreground = Ink; view.Background = Theme.Window; frame.Background = Theme.Window; }
+        private void ApplyTheme() {
+            view.Resources = Theme.Styles(); view.Foreground = Ink; view.Background = Theme.Window; frame.Background = Theme.Window;
+            var hwnd = PresentationSource.FromVisual(view) as HwndSource; if (hwnd != null) PaintBase(hwnd);
+        }
+        // Until WPF draws a frame (opening, or the area a maximize uncovers) Windows fills the window
+        // with its class brush, white by default: use the theme's window colour for that and for WPF's clear colour.
+        private IntPtr baseBrush;
+        private void PaintBase(HwndSource hwnd) {
+            var brush = Theme.Window as SolidColorBrush; if (brush == null) return; Color c = brush.Color;
+            hwnd.CompositionTarget.BackgroundColor = c;
+            IntPtr next = CreateSolidBrush(c.R | (c.G << 8) | (c.B << 16));
+            SetClassLongPtr(hwnd.Handle, -10, next);   // GCLP_HBRBACKGROUND
+            if (baseBrush != IntPtr.Zero) DeleteObject(baseBrush); baseBrush = next;
+        }
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern IntPtr CreateSolidBrush(int color);
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr handle);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetClassLongPtrW")] private static extern IntPtr SetClassLongPtr(IntPtr handle, int index, IntPtr value);
         public static int PageCount(int count) { return Math.Max(1, (Math.Max(0, count) + 1) / 2); }
         public static string Level(double? remaining) { return !remaining.HasValue ? "未知" : remaining < 20 ? "告急" : remaining < 40 ? "偏紧" : "充足"; }
         private static string Tone(double? remaining) { return Theme.Tone(remaining); }

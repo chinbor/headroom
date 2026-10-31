@@ -60,7 +60,6 @@ namespace CodeUsageMonit {
             ordered.AddRange(states.Where(s => !ordered.Contains(s)));
             foreach (ProviderState s in ordered) body.Children.Add(Row(s, now));
             if (states.Count == 0) body.Children.Add(Text("还没有订阅，点击打开设置添加。", 11, Theme.Dim));
-            var foot = Text("单击打开详情 · 右键更多操作", 10, Theme.Dim); foot.Margin = new Thickness(0, 8, 0, 0); body.Children.Add(foot);
             return new Border { Margin = new Thickness(12), Padding = new Thickness(14, 12, 14, 10), CornerRadius = new CornerRadius(10), Background = Theme.Surface, BorderBrush = Theme.Edge, BorderThickness = new Thickness(1), Child = body, Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 2, Opacity = .3, Color = Colors.Black } };
         }
         private FrameworkElement Row(ProviderState s, DateTime now) {
