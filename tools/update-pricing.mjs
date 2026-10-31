@@ -27,7 +27,7 @@ const [tablePath, snapPath] = args;
 const opt = name => { const i = args.indexOf(name); return i > 0 ? args[i + 1] : null; };
 if (!tablePath || !snapPath) { console.error('usage: update-pricing.mjs <pricing.json> <snapshot.json> [--litellm file] [--modelsdev file]'); process.exit(2); }
 
-const load = async (file, url) => JSON.parse(file ? await fs.readFile(file, 'utf8') : await (await fetch(url, { headers: { 'User-Agent': 'codeusagemonit-pricing' } })).text());
+const load = async (file, url) => JSON.parse(file ? await fs.readFile(file, 'utf8') : await (await fetch(url, { headers: { 'User-Agent': 'headroom-pricing' } })).text());
 const round = v => +(+v).toFixed(6);
 const bare = k => k.split('/').pop();
 

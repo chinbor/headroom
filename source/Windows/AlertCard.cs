@@ -10,7 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // The alert card in the bottom-right corner: which windows just turned urgent (or will run
     // out within the hour), with the reason on a second line. It never takes focus; it closes
     // itself after a while, but stays while the pointer is on it.

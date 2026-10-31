@@ -27,13 +27,13 @@ The interface is in Simplified Chinese.
 
 ## Install
 
-Windows 11 x64 with .NET Framework 4.8 (built in). Download `codeusagemonit-setup-<version>.exe` or the portable `codeusagemonit-<version>-win-x64.zip` from [Releases](https://github.com/chinbor/headroom/releases/latest), or run:
+Windows 11 x64 with .NET Framework 4.8 (built in). Download `headroom-setup-<version>.exe` or the portable `headroom-<version>-win-x64.zip` from [Releases](https://github.com/chinbor/headroom/releases/latest), or run:
 
 ```powershell
 irm https://raw.githubusercontent.com/chinbor/headroom/main/install.ps1 | iex
 ```
 
-Run `codeusagemonit.exe --demo` to try it with made-up data. The executable and data folder keep the original name `codeusagemonit`.
+Run `headroom.exe --demo` to try it with made-up data. Settings live in `%LOCALAPPDATA%\Headroom` (installed) or `data\` beside the exe (portable). Upgrading from 2.0.1 or earlier (`codeusagemonit.exe`) moves the old `%LOCALAPPDATA%\codeusagemonit` folder and the autostart entry over on first start.
 
 ## Privacy
 
@@ -49,4 +49,4 @@ Pushing a `v*.*.*` tag builds and publishes a release with GitHub Actions.
 
 ## Credits
 
-Forked from [codeusagemonit](https://github.com/fanchengliu/codeusagemonit). See [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md). MIT licensed; not affiliated with any of the monitored services.
+Forked from [codeusagemonit](https://github.com/fanchengliu/codeusagemonit) (MIT); its history up to 1.0.2 is kept in the changelog. See [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md). MIT licensed; not affiliated with any of the monitored services.

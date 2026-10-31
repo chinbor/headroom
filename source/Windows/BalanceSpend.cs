@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Actual spend derived from successive balance readings (DeepSeek: GET /user/balance with
     // the API key, which does not expire). A drop between two readings is money spent on the
     // day of the later reading; a rise is a top-up and only moves the baseline. Readings start

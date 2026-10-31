@@ -12,7 +12,7 @@ using Forms = System.Windows.Forms;
 using Drawing = System.Drawing;
 using Gdi = System.Drawing.Drawing2D;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Compact native taskbar child (not a system-reserved space). No DLL injection,
     // new AppBar, topmost overlay or moving of Explorer windows.
     public sealed class TaskbarPanel : IDisposable {

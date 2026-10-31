@@ -8,7 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // One visual system for the detail window and the settings editors: colour tokens that
     // follow Windows' app light/dark mode and accent colour, and themed control templates
     // (switch, drop-down, text boxes, thin scroll bars, tool tips). Status colours carry
@@ -44,8 +44,8 @@ namespace CodeUsageMonit {
                     if (v is int) { uint abgr = unchecked((uint)(int)v); accent = Color.FromRgb((byte)(abgr & 0xFF), (byte)((abgr >> 8) & 0xFF), (byte)((abgr >> 16) & 0xFF)); }
                 }
             } catch { }
-            // CODEUSAGEMONIT_THEME=light|dark overrides Windows (for checking both looks).
-            string forced = Environment.GetEnvironmentVariable("CODEUSAGEMONIT_THEME");
+            // HEADROOM_THEME=light|dark overrides Windows (for checking both looks).
+            string forced = Environment.GetEnvironmentVariable("HEADROOM_THEME");
             if (forced == "light") dark = false; else if (forced == "dark") dark = true;
             // A grey accent (Windows' "automatic" on a grey wallpaper) would make an "on" switch look
             // disabled; fall back to the app blue.

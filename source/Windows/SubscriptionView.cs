@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Shared display semantics for native taskbar cells and the WPF dashboard.
     // Never equate account balance, local token statistics and subscription quota.
     public static class SubscriptionView {

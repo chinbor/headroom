@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Scans every supported agent's local history into its hourly index (data/*-logs.json)
     // and derives the 30-day daily history the panel and CLI show.
     public static class UsageScanner {
@@ -12,17 +12,8 @@ namespace CodeUsageMonit {
         public static readonly Agent[] Agents = {
             new Agent { Id = "codex", File = "codex-logs.json", Scan = CodexLogs.Scan },
             new Agent { Id = "claude", File = "claude-logs.json", Scan = ClaudeLogs.Scan },
-            // Cursor has no local log: its dashboard's usage events (CursorUsage.cs).
-            new Agent { Id = "cursor", File = "cursor-logs.json", Scan = CursorUsage.Scan },
             // DeepSeek: the DeepSeek Harness sessions (DeepSeekHarness.cs, zstd-compressed JSONL).
-            new Agent { Id = "deepseek", File = "deepseek-logs.json", Scan = HarnessLogs.Scan },
-            new Agent { Id = "antigravity", File = "antigravity-logs.json", Scan = AgentLogs.ScanAntigravity },
-            new Agent { Id = "zcode", File = "zcode-logs.json", Scan = AgentLogs.ScanZcode },
-            new Agent { Id = "grok", File = "grok-logs.json", Scan = AgentLogs.ScanGrok },
-            new Agent { Id = "kimi", File = "kimi-logs.json", Scan = AgentLogs.ScanKimi },
-            new Agent { Id = "pi", File = "pi-logs.json", Scan = MoreAgentLogs.ScanPi },
-            new Agent { Id = "copilot", File = "copilot-logs.json", Scan = MoreAgentLogs.ScanCopilot },
-            new Agent { Id = "opencode", File = "opencode-logs.json", Scan = MoreAgentLogs.ScanOpenCode }
+            new Agent { Id = "deepseek", File = "deepseek-logs.json", Scan = HarnessLogs.Scan }
         };
         // Scans the given agents in parallel; each index is read from and written to data/.
         public static Dictionary<string, LogIndex> ScanAll(IEnumerable<string> ids, DateTime nowUtc, bool persist) {

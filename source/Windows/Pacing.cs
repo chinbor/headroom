@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // How often each platform is read. By default every platform follows the global interval
     // (设置 › 高级 › 自动刷新); a platform can have its own, and one whose client is writing
     // its local session logs right now ("in use", e.g. a Claude Code conversation) is read
@@ -26,29 +26,16 @@ namespace CodeUsageMonit {
         }
         // Folders whose files change while a platform's client is working.
         public static IEnumerable<string> ActivityFolders(string id) {
-            string home = LogReader.Home;
-            Func<string, string, string> env = (variable, fallback) => { string v = Environment.GetEnvironmentVariable(variable); return String.IsNullOrWhiteSpace(v) ? fallback : v.Trim(); };
             switch (id) {
                 case "codex": return new[] { Path.Combine(ProviderService.CodexHome(), "sessions") };
                 case "claude": return ClaudeLogs.ConfigDirs().Select(d => Path.Combine(d, "projects"));
-                case "cursor": return new[] { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Cursor", "User", "globalStorage") };
-                case "antigravity": return new[] { Path.Combine(home, ".gemini") };
                 case "deepseek": return new[] { Path.Combine(HarnessLogs.Root, "sessions") };
-                case "grok": return new[] { Path.Combine(env("GROK_HOME", Path.Combine(home, ".grok")), "sessions") };
-                case "kimi": return new[] { Path.Combine(home, ".kimi"), Path.Combine(home, ".kimi-code") };
-                case "zcode": return new[] { env("ZCODE_HOME", Path.Combine(home, ".zcode")) };
-                case "opencode": return new[] { Path.Combine(home, ".local", "share", "opencode") };
-                case "pi": return new[] { Path.Combine(home, ".pi", "agent", "sessions") };
-                case "copilot": return new[] { env("COPILOT_HOME", Path.Combine(home, ".copilot")) };
                 default: return new string[0];
             }
         }
         // Whether a changed file in a watched folder means work (not, say, a config file).
         public static bool CountsAsWork(string id, string path) {
             string name = Path.GetFileName(path).ToLowerInvariant();
-            if (id == "cursor") return name.StartsWith("state.vscdb", StringComparison.Ordinal);
-            // Antigravity: its conversation databases, not the app's caches and logs.
-            if (id == "antigravity") return path.IndexOf("antigravity", StringComparison.OrdinalIgnoreCase) >= 0 && path.IndexOf("conversations", StringComparison.OrdinalIgnoreCase) >= 0;
             return name.EndsWith(".jsonl") || name.Contains(".jsonl.") || name.EndsWith(".db") || name.EndsWith(".sqlite") || name.EndsWith(".json") || name.Contains("-wal");
         }
     }

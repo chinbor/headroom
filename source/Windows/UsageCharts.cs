@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Data for the consumption charts in the detail window: per-day values split by agent
     // (stacked bars) and per-agent totals (ranking), as tokens or API-equivalent cost.
     public static class UsageCharts {

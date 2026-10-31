@@ -10,7 +10,7 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     public sealed partial class MonitorPanel {
         // Sign-in window for platforms read with a web console token (token.kind = console): the console
         // opens in an embedded Edge (WebView2) and once the user is signed in the token is read from the

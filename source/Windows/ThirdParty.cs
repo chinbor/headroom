@@ -6,7 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Bar data for the per-period usage reports (one bar per hour or day, parts per source).
     public sealed class ChartBar {
         public DateTime Start; public bool Hourly, Current;

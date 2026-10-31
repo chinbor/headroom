@@ -1,4 +1,4 @@
-﻿; codeusagemonit setup.exe
+﻿; Headroom setup.exe
 ;
 ; Inno Setup 6.3 or newer. ChineseSimplified.isl sits beside this script
 ; (user-contributed translation; the 6.7 installer does not ship it).
@@ -7,17 +7,19 @@
 ; CopyFile replaced FileCopy in 6.4; 6.3 still compiles the old name.
 ; Build from the repo:  .\source\Windows\build.ps1 -Installer
 ; Or, after build.ps1 has produced the executables in the repo root:
-;   ISCC.exe source\Windows\installer\codeusagemonit.iss
+;   ISCC.exe source\Windows\installer\headroom.iss
 ;
 #if Ver < EncodeVer(6, 3, 0)
-  #error codeusagemonit setup requires Inno Setup 6.3 or newer
+  #error Headroom setup requires Inno Setup 6.3 or newer
 #endif
 
-; AppId is stable on purpose: upgrades replace program files and keep
-; %LOCALAPPDATA%\codeusagemonit. Do not change it.
+; AppId is stable on purpose: upgrades replace program files and keep the data. Do not
+; change it. Versions up to 2.0.1 installed codeusagemonit.exe under the same AppId; an
+; upgrade deletes that exe and its registry key, and on first start the app moves
+; %LOCALAPPDATA%\codeusagemonit to %LOCALAPPDATA%\Headroom and renames the autostart entry.
 ;
-; Data: this installer writes installed.txt and HKCU\Software\codeusagemonit\InstallPath.
-; The app then stores settings in %LOCALAPPDATA%\codeusagemonit (not next to the exe),
+; Data: this installer writes installed.txt and HKCU\Software\Headroom\InstallPath.
+; The app then stores settings in %LOCALAPPDATA%\Headroom (not next to the exe),
 ; so Program Files works. The zip has neither marker and keeps using <exe>\data.
 ; portable.txt next to the exe forces that portable layout.
 
@@ -32,7 +34,7 @@
 #endif
 
 #define MyAppName "余量 Headroom"
-#define MyAppPublisher "codeusagemonit"
+#define MyAppPublisher "Headroom"
 #define MyAppURL "https://github.com/chinbor/headroom"
 
 [Setup]
@@ -49,7 +51,7 @@ VersionInfoVersion={#MyAppVersion}.0
 VersionInfoProductVersion={#MyAppVersion}.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription=Headroom setup
-VersionInfoCopyright=Copyright (C) 2026 codeusagemonit contributors
+VersionInfoCopyright=Copyright (C) 2026 Headroom contributors
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -59,9 +61,9 @@ UsePreviousAppDir=yes
 DirExistsWarning=auto
 AlwaysShowDirOnReadyPage=yes
 OutputDir="{#BuildDir}"
-OutputBaseFilename=codeusagemonit-setup-{#MyAppVersion}
+OutputBaseFilename=headroom-setup-{#MyAppVersion}
 SetupIconFile="{#BuildDir}\app.ico"
-UninstallDisplayIcon={app}\codeusagemonit.exe
+UninstallDisplayIcon={app}\headroom.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -90,8 +92,12 @@ english.AutoStart=Start with Windows (tray only)
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "autostart"; Description: "{cm:AutoStart}"; GroupDescription: "{cm:Options}"; Flags: unchecked
 
+[InstallDelete]
+; The exe of versions up to 2.0.1.
+Type: files; Name: "{app}\codeusagemonit.exe"
+
 [Files]
-Source: "{#BuildDir}\codeusagemonit.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\headroom.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\app.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\Microsoft.Web.WebView2.Core.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\Microsoft.Web.WebView2.Wpf.dll"; DestDir: "{app}"; Flags: ignoreversion
@@ -107,16 +113,17 @@ Source: "setup-helper.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "setup-helper.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\codeusagemonit.exe"; WorkingDir: "{app}"; Comment: "{#MyAppName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\codeusagemonit.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\headroom.exe"; WorkingDir: "{app}"; Comment: "{#MyAppName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\headroom.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Registry]
 ; Per-user even for an all-users install. installed.txt is what other Windows users see.
-Root: HKCU; Subkey: "Software\codeusagemonit"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "codeusagemonit"; ValueData: """{app}\codeusagemonit.exe"" --background"; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "Software\codeusagemonit"; Flags: deletekey
+Root: HKCU; Subkey: "Software\Headroom"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Headroom"; ValueData: """{app}\headroom.exe"" --background"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\codeusagemonit.exe"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\headroom.exe"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 ; An update started from inside the app runs this setup with /VERYSILENT /restart=1 and the app
 ; quits; DeinitializeSetup below opens it again, also when the install did not go through.
 
@@ -179,7 +186,7 @@ begin
   if not RelaunchAfterUpdate then Exit;
   try
     { The new exe after a successful install, the previous one if setup stopped early. }
-    Exe := ExpandConstant('{app}\codeusagemonit.exe');
+    Exe := ExpandConstant('{app}\headroom.exe');
     if FileExists(Exe) then
       ExecAsOriginalUser(Exe, RelaunchParameters, ExpandConstant('{app}'), SW_SHOWNORMAL, ewNoWait, ResultCode);
   except
@@ -199,19 +206,24 @@ begin
   Result := True;
 end;
 
-procedure RemoveAutoStart;
+procedure RemoveRunValue(const Name: String);
 var
-  Value, ExePath: String;
+  Value: String;
 begin
-  ExePath := Uppercase(ExpandConstant('{app}\codeusagemonit.exe'));
-  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'codeusagemonit', Value) then
-    if Pos(ExePath, Uppercase(Value)) > 0 then
-      RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'codeusagemonit');
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', Name, Value) then
+    if Pos(Uppercase(ExpandConstant('{app}\')), Uppercase(Value)) > 0 then
+      RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', Name);
+end;
+
+procedure RemoveAutoStart;
+begin
+  RemoveRunValue('Headroom');
+  RemoveRunValue('codeusagemonit');
 end;
 
 function IsUserDataDir(const Dir: String): Boolean;
 begin
-  Result := (Length(Dir) > 16) and (Uppercase(ExtractFileName(RemoveBackslash(Dir))) = 'CODEUSAGEMONIT') and DirExists(Dir);
+  Result := (Length(Dir) > 16) and (Uppercase(ExtractFileName(RemoveBackslash(Dir))) = 'HEADROOM') and DirExists(Dir);
 end;
 
 function IsBesideDataDir(const Dir: String): Boolean;
@@ -260,7 +272,7 @@ begin
     RunHelper('stop', UninstallHelper);
     RunHelper('remove-path', UninstallHelper);
     RemoveAutoStart;
-    UserDataDir := ExpandConstant('{localappdata}\codeusagemonit');
+    UserDataDir := ExpandConstant('{localappdata}\Headroom');
     BesideDir := ExpandConstant('{app}\data');
     { Classify before program files (and a helper that failed to copy out) disappear. }
     UserLinkCode := RunHelper3('is-link', UninstallHelper, UserDataDir);

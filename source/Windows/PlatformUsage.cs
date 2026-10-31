@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Daily usage reported by a platform's own console (recipes with a "usage" request, e.g.
     // DeepSeek and Agnes). Where a platform reports its days they replace the local log
     // estimate for that agent: the console also counts requests made from other computers

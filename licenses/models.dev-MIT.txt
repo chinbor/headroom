@@ -1,5 +1,5 @@
 Applies to: model and price data from https://github.com/anomalyco/models.dev
-(long-context tiers and some model prices compiled into codeusagemonit's pricing.json).
+(long-context tiers and some model prices compiled into Headroom's pricing.json).
 
 MIT License
 

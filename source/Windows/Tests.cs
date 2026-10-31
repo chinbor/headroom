@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     public static class SelfTests {
         public static int Run() {
             var passed = new List<string>(); var failed = new List<string>();
@@ -183,7 +183,7 @@ namespace CodeUsageMonit {
                 var local = new UsageHistory();
                 local.Days.Add(new DayUsage { Day = "2026-10-30", Agent = "deepseek", Tokens = 5 });
                 local.Days.Add(new DayUsage { Day = "2026-10-30", Agent = "codex", Tokens = 7 });
-                local.Days.Add(new DayUsage { Day = "2026-10-30", Agent = "cursor", Tokens = 9 });   // not offered: left out
+                local.Days.Add(new DayUsage { Day = "2026-10-30", Agent = "gemini", Tokens = 9 });   // not offered: left out
                 var dsState = new ProviderState { Id = "deepseek" }; dsState.PlatformDays = days;
                 var merged = PlatformUsage.Combine(local, new[] { dsState, new ProviderState { Id = "codex" } });
                 Require(merged.Days.Count == 2 && merged.Days.Single(d => d.Agent == "deepseek").Tokens == 1200 && merged.Days.Single(d => d.Agent == "codex").Tokens == 7 && local.Days.Count == 3);
@@ -345,62 +345,10 @@ namespace CodeUsageMonit {
                 var s = Parsers.Codex(J.Parse("{\"rate_limit\":{\"primary_window\":{\"used_percent\":25,\"limit_window_seconds\":18000}},\"additional_rate_limits\":[null,{}, {\"limit_name\":\"test-model\",\"rate_limit\":{\"primary_window\":{\"used_percent\":50,\"limit_window_seconds\":604800}}}]}"));
                 Require(s.Quotas.Count == 2 && s.Quotas[0].Remaining == 75);
             });
-            test("Cursor total, Auto and API retain separate metrics", () => {
-                var s = Parsers.Cursor(J.Parse("{\"individualUsage\":{\"plan\":{\"totalPercentUsed\":20,\"autoPercentUsed\":5,\"apiPercentUsed\":99}}}"));
-                Require(s.Quotas.Count == 3 && s.Quotas[0].Remaining == 80 && s.Quotas[1].Remaining == 95 && s.Quotas[2].Remaining == 1);
-            });
-            test("Cursor cycle duration is used only when both API boundaries exist", () => {
-                var state = Parsers.Cursor(J.Parse("{\"membershipType\":\"pro\",\"billingCycleStart\":\"2026-01-01T00:00:00Z\",\"billingCycleEnd\":\"2026-01-31T00:00:00Z\",\"individualUsage\":{\"plan\":{\"totalPercentUsed\":20}}}"));
-                Require(state.Plan == "Cursor Pro" && state.Quotas[0].WindowSeconds == 2592000);
-                var missing = Parsers.Cursor(J.Parse("{\"billingCycleEnd\":\"2026-01-31T00:00:00Z\",\"individualUsage\":{\"plan\":{\"totalPercentUsed\":20}}}")); Require(missing.Quotas[0].WindowSeconds == 0);
-            });
-            test("Cursor Grok Bot weekly quota is appended after the plan meters", () => {
-                var s = Parsers.Cursor(J.Parse("{\"membershipType\":\"pro\",\"billingCycleStart\":\"2026-09-02T03:15:00.000Z\",\"billingCycleEnd\":\"2026-10-02T03:15:00.000Z\",\"individualUsage\":{\"plan\":{\"totalPercentUsed\":20.38,\"autoPercentUsed\":12.53,\"apiPercentUsed\":98.89}}}"));
-                Parsers.CursorGrokBot(s, J.Parse("{\"currentPeriodStart\":\"2026-09-24T03:13:20.873Z\",\"nextResetTimestampUtc\":\"2026-10-01T03:13:20.873Z\",\"usagePercent\":69.163729,\"hasNonZeroIncludedLimit\":true,\"hasAvailableUsage\":true}"));
-                Require(s.Quotas.Count == 4 && s.Quotas[0].Label == "套餐总量" && s.Quotas[1].Label == "Auto" && s.Quotas[2].Label == "API / 手动模型" && s.Quotas[3].Label == Parsers.CursorGrokLabel);
-                Require(Math.Abs(s.Quotas[3].Used - 69.163729) < 1e-4 && Math.Abs(s.Quotas[3].Remaining - 30.836271) < 1e-4);
-                Require(s.Quotas[3].ResetUtc.StartsWith("2026-10-01T03:13:20") && Math.Abs(s.Quotas[3].WindowSeconds - 604800) < 1);
-                Require(UsageDetails.Primary(s).Label == "套餐总量" && UsageDetails.MainWindow(s).Label == "套餐总量");
-                var noCycle = Parsers.Cursor(J.Parse("{\"individualUsage\":{\"plan\":{\"totalPercentUsed\":20,\"autoPercentUsed\":5,\"apiPercentUsed\":99}}}"));
-                Parsers.CursorGrokBot(noCycle, J.Parse("{\"usagePercent\":69.163729,\"hasNonZeroIncludedLimit\":true,\"currentPeriodStart\":\"2026-09-24T03:13:20.873Z\",\"nextResetTimestampUtc\":\"2026-10-01T03:13:20.873Z\"}"));
-                Require(UsageDetails.Primary(noCycle).Label == "套餐总量" && UsageDetails.MainWindow(noCycle) == null);
-            });
-            test("Cursor Grok Bot with a zero included limit adds no quota", () => {
-                var s = Parsers.Cursor(J.Parse("{\"individualUsage\":{\"plan\":{\"totalPercentUsed\":20,\"autoPercentUsed\":5,\"apiPercentUsed\":99}}}"));
-                Parsers.CursorGrokBot(s, J.Parse("{\"usagePercent\":69,\"hasNonZeroIncludedLimit\":false,\"hasAvailableUsage\":false,\"nextResetTimestampUtc\":\"2026-10-01T03:13:20.873Z\",\"currentPeriodStart\":\"2026-09-24T03:13:20.873Z\"}"));
-                Require(s.Quotas.Count == 3 && s.Quotas.All(q => q.Label != Parsers.CursorGrokLabel) && s.Quotas[0].Remaining == 80);
-            });
-            test("Cursor Grok Bot missing fields add no quota", () => {
-                var s = Parsers.Cursor(J.Parse("{\"individualUsage\":{\"plan\":{\"totalPercentUsed\":20}}}"));
-                Parsers.CursorGrokBot(s, null);
-                Parsers.CursorGrokBot(s, J.Parse("{}"));
-                Parsers.CursorGrokBot(s, J.Parse("{\"hasNonZeroIncludedLimit\":true,\"nextResetTimestampUtc\":\"2026-10-01T03:13:20.873Z\"}"));
-                Parsers.CursorGrokBot(s, J.Parse("{\"usagePercent\":69,\"nextResetTimestampUtc\":\"2026-10-01T03:13:20.873Z\"}"));
-                Parsers.CursorGrokBot(s, J.Parse("{\"hasNonZeroIncludedLimit\":true,\"usagePercent\":\"nope\"}"));
-                Require(s.Quotas.Count == 1 && s.Quotas[0].Label == "套餐总量" && s.Quotas[0].Remaining == 80);
-            });
             test("DeepSeek currencies are never summed or treated as percentages", () => {
                 var s = Parsers.DeepSeek(J.Parse("{\"balance_infos\":[{\"currency\":\"CNY\",\"total_balance\":\"12.34\"},{\"currency\":\"USD\",\"total_balance\":\"2.50\"}]}"));
                 Require(s.Quotas.Count == 0 && s.Balances.Count == 2 && s.Balances[0].Amount == 12.34);
             });
-            test("Antigravity fractions map correctly and null buckets stay absent", () => {
-                var s = Parsers.Antigravity(J.Parse("{\"groups\":[{\"displayName\":\"Gemini\",\"buckets\":[{\"window\":\"5h\",\"remainingFraction\":0.7},{\"window\":\"weekly\",\"remainingFraction\":null}]}]}"));
-                Require(s.Quotas.Count == 1 && Math.Abs(s.Quotas[0].Remaining - 70) < 0.0001);
-            });
-            test("Antigravity model fallback preserves each model's quota", () => {
-                var s = Parsers.Antigravity(J.Parse("{\"models\":{\"model-a\":{\"quotaInfo\":{\"remainingFraction\":0}},\"model-b\":{\"quotaInfo\":{\"remainingFraction\":1}}}}"));
-                Require(s.Quotas.Count == 2 && s.Quotas.Sum(q => q.Remaining) == 100);
-            });
-            test("Grok zero spend is a full allowance, not missing data", () => {
-                var s = Parsers.Grok(J.Parse("{\"config\":{\"creditUsagePercent\":0}}")); Require(s.Quotas.Count == 1 && s.Quotas[0].Remaining == 100);
-            });
-            test("Grok product shares split the one allowance and are not quotas", () => {
-                var s = Parsers.Grok(J.Parse("{\"config\":{\"creditUsagePercent\":63,\"productUsage\":[{\"product\":\"GROK_BUILD\",\"usagePercent\":55},{\"product\":\"CHAT\",\"usagePercent\":8}]}}"));
-                Require(s.Quotas.Count == 1 && s.Quotas[0].Remaining == 37 && s.ProductUsage.Count == 2 && s.ProductUsage[0].DisplayName == "Build" && s.ProductUsage[1].DisplayName == "Chat");
-                var old = new ProviderState { Id = "grok" }; Parsers.Add(old, "当前账期", 63, null); Parsers.Add(old, "Build 占比", 55, null);
-                Require(Parsers.Normalize(old).Quotas.Count == 1 && old.Quotas[0].Label == "当前账期" && old.Quotas[0].Remaining == 37 && old.ProductUsage.Count == 0);
-            });
-            GrokTests.Run(test);
             RecoveryTests.Run(test);
             test("Percentages are bounded and nonnumeric values ignored", () => {
                 var s = new ProviderState(); Parsers.Add(s, "one", -10, null); Parsers.Add(s, "two", 150, null); Parsers.Add(s, "bad", "NaN", null); Require(s.Quotas.Count == 2 && s.Quotas[0].Remaining == 100 && s.Quotas[1].Remaining == 0);
@@ -563,18 +511,6 @@ namespace CodeUsageMonit {
                 using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(first + rest))) ClaudeLogs.Read(index, copy, "t.jsonl", stream, 0);
                 Require(copy.Hours.Values.Sum(x => x.TN) == 0 && state.Hours["2026092711||demo-claude"].TN == 2);
             });
-            test("Output speed (Grok, history): recorded API time per turn; timing reaches the daily rows", () => {
-                string line = "{\"timestamp\":1750000000,\"params\":{\"sessionId\":\"sess-1\",\"update\":{\"sessionUpdate\":\"turn_completed\",\"usage\":{\"modelUsage\":{\"grok-demo\":{\"inputTokens\":100,\"outputTokens\":1000,\"modelCalls\":2,\"apiDurationMs\":20000},\"grok-mini\":{\"inputTokens\":10,\"outputTokens\":60,\"modelCalls\":2,\"apiDurationMs\":3000}}}},\"_meta\":{\"eventId\":\"evt-2\"}}}";
-                var index = new LogIndex(); var file = new LogFile(); index.Files.Add(file);
-                AgentLogs.GrokLine(index, file, line, "s", null);
-                Bucket b = file.Hours["2025061515||grok-demo"], mini = file.Hours["2025061515||grok-mini"];
-                Require(b.TN == 2 && b.TO == 1000 && b.TS == 20 && b.Speed() == 50 && mini.TN == 0);
-                UsageHistory h = HistoryService.FromIndexes(new Dictionary<string, LogIndex> { { "grok", index } }, TimeZoneInfo.Utc, new DateTime(2025, 6, 15), 30);
-                DayUsage row = h.Days.Single();
-                Require(row.TimedRequests == 2 && row.TimedOutput == 1000 && row.TimedSeconds == 20 && row.Models.First(m => m.Model == "grok-demo").TimedSeconds == 20);
-                Require(OutputTiming.Speed(1000, .5) == null && OutputTiming.Text(null) == "—" && OutputTiming.Text(50) == "50 t/s" && OutputTiming.Text(103.4) == "103 t/s" && OutputTiming.Text(9.46) == "9.5 t/s");
-                Require(!OutputTiming.Accept(49, 10) && !OutputTiming.Accept(1000, 601) && OutputTiming.Accept(1000, 20) && OutputTiming.Supported("codex") && !OutputTiming.Supported("antigravity"));
-            });
             test("Codex endpoint is read from model_provider, profiles and provider tables", () => {
                 string toml = "model = \"m\"\nmodel_provider = \"custom\"\n[projects.'D:\\x.y']\ntrust_level = \"trusted\"\n[model_providers.\"custom\"]\nname = \"custom\"\nbase_url = \"https://Relay.Example.com/v1\" # comment\n";
                 Require(Endpoints.ActiveCodexProvider(toml) == "custom" && Endpoints.Host(Endpoints.Toml(toml, "model_providers.custom", "base_url")) == "relay.example.com");
@@ -637,17 +573,17 @@ namespace CodeUsageMonit {
             });
             test("Per-platform refresh: own interval, faster while in use, never under a minute", () => {
                 var config = new AppConfig { RefreshMinutes = 5, FastInUse = true, InUseMinutes = 2 };
-                config.ProviderMinutes["kimi"] = 30;
+                config.ProviderMinutes["claude"] = 30;
                 Require(Pacing.Minutes(config, "codex", false) == 5 && Pacing.Minutes(config, "codex", true) == 2);
-                Require(Pacing.Minutes(config, "kimi", false) == 30 && Pacing.Minutes(config, "kimi", true) == 2);
+                Require(Pacing.Minutes(config, "claude", false) == 30 && Pacing.Minutes(config, "claude", true) == 2);
                 config.FastInUse = false; Require(Pacing.Minutes(config, "codex", true) == 5);
                 config.InUseMinutes = 0; config.FastInUse = true; Require(Pacing.Minutes(config, "codex", true) == 1);
                 DateTime now = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
                 Require(Pacing.Due(DateTime.MinValue, 5, now) && Pacing.Due(now.AddMinutes(-5), 5, now) && Pacing.Due(now.AddSeconds(-290), 5, now) && !Pacing.Due(now.AddMinutes(-4), 5, now));
-                Require(Pacing.CountsAsWork("claude", @"C:\u\.claude\projects\p\s.jsonl") && !Pacing.CountsAsWork("cursor", @"C:\u\Cursor\User\globalStorage\storage.json") && Pacing.CountsAsWork("cursor", @"C:\u\Cursor\User\globalStorage\state.vscdb-wal"));
+                Require(Pacing.CountsAsWork("claude", @"C:\u\.claude\projects\p\s.jsonl") && !Pacing.CountsAsWork("claude", @"C:\u\.claude\settings.toml") && Pacing.CountsAsWork("deepseek", @"C:\u\.deepseek\sessions\a.db-wal"));
             });
             test("A truncated log is read again from the start and its surviving records count", () => {
-                string dir = Path.Combine(Path.GetTempPath(), "codeusagemonit-trunc-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
+                string dir = Path.Combine(Path.GetTempPath(), "headroom-trunc-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
                 try {
                     string path = Path.Combine(dir, "rollout.jsonl"); DateTime now = DateTime.UtcNow, at = now.AddHours(-1);
                     Func<int, int, string> count = (sec, total) => "{\"timestamp\":\"" + at.AddSeconds(sec).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") + "\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":" + total + ",\"output_tokens\":0},\"last_token_usage\":{\"input_tokens\":200,\"output_tokens\":0}}}}";
@@ -661,23 +597,6 @@ namespace CodeUsageMonit {
                     Require(Math.Abs(index.Entries().Sum(h => h.Tokens) - 200) < 1e-9);
                 } finally { try { Directory.Delete(dir, true); } catch { } }
             });
-            test("Cursor dashboard events fold into hourly buckets per model, once each", () => {
-                var index = new LogIndex { CoveredFrom = "2026-09-01T00:00:00Z" }; var file = new LogFile { Name = "cursor-dashboard" }; index.Files.Add(file);
-                object page = J.Serializer().DeserializeObject("{\"totalUsageEventsCount\":3,\"usageEventsDisplay\":[" +
-                    "{\"timestamp\":\"1790000000000\",\"model\":\"claude-x\",\"kind\":\"USAGE_EVENT_KIND_USAGE_BASED\",\"tokenUsage\":{\"inputTokens\":100,\"outputTokens\":20,\"cacheReadTokens\":300,\"cacheWriteTokens\":5,\"totalCents\":12.5}}," +
-                    "{\"timestamp\":\"1790000060000\",\"model\":\"default\",\"tokenUsage\":{\"inputTokens\":10,\"outputTokens\":1}}," +
-                    "{\"timestamp\":\"1790000120000\",\"model\":\"claude-x\",\"kind\":\"USAGE_EVENT_KIND_INCLUDED_IN_PRO\"}]}");
-                List<object> events = CursorUsage.Events(page).ToList();
-                Require(events.Count == 3);
-                foreach (object e in events) CursorUsage.Add(index, file, e);
-                foreach (object e in events) CursorUsage.Add(index, file, e); // a re-fetched page counts once
-                List<HourUsage> hours = index.Entries().ToList();
-                HourUsage x = hours.Single(h => h.Model == "claude-x"), auto = hours.Single(h => h.Model == "auto");
-                Require(x.Hour == new DateTime(2026, 9, 21, 14, 0, 0, DateTimeKind.Utc) && x.Endpoint == null);
-                Require(x.Requests == 2 && x.Input == 100 && x.Output == 20 && x.Cached == 300 && x.CacheWrite == 5 && Math.Abs(x.Cost - .125) < 1e-9);
-                Require(auto.Requests == 1 && auto.Tokens == 11);
-                Require(CursorUsage.Body(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc), 2).Contains("\"startDate\":\"1788220800000\""));
-            });
             test("Exact window clips hour buckets by overlap, tokens and cost alike", () => {
                 var zone = TimeZoneInfo.FindSystemTimeZoneById("China Standard Time");
                 var index = new LogIndex { CoveredFrom = "2026-09-01T00:00:00Z", Updated = "2026-09-29T10:00:00Z" };
@@ -687,30 +606,6 @@ namespace CodeUsageMonit {
                 var usage = UsageDetails.Window(new DayUsage[0], q, new DateTime(2026, 9, 29, 0, 0, 0, DateTimeKind.Utc), 0, index, zone);
                 Require(usage.Exact && Math.Abs(usage.Tokens - 6500) < .001 && Math.Abs(usage.Cost - 10.5) < 1e-9 && usage.CostComplete);
                 Require(!UsageDetails.Window(new DayUsage[0], q, new DateTime(2026, 9, 29, 0, 0, 0, DateTimeKind.Utc), 4, index, zone).Exact);
-            });
-            test("Copilot maps percent_remaining, skips placeholders and unlimited pools", () => {
-                var s = Parsers.Copilot(J.Parse("{\"copilot_plan\":\"individual_pro\",\"quota_reset_date\":\"2026-10-01\",\"quota_snapshots\":{\"premium_interactions\":{\"entitlement\":300,\"remaining\":120,\"percent_remaining\":40,\"unlimited\":false},\"chat\":{\"unlimited\":true},\"completions\":{\"entitlement\":0,\"remaining\":0,\"percent_remaining\":0}}}"));
-                Require(s.Quotas.Count == 1 && s.Quotas[0].Label == "高级请求" && s.Quotas[0].Remaining == 40 && s.Quotas[0].ResetUtc.StartsWith("2026-10-01") && s.Quotas[0].WindowSeconds > 2000000 && s.Plan == "Copilot Individual Pro");
-                var derived = Parsers.Copilot(J.Parse("{\"quota_snapshots\":{\"premium_interactions\":{\"entitlement\":50,\"remaining\":10}}}"));
-                Require(derived.Quotas.Count == 1 && Math.Abs(derived.Quotas[0].Remaining - 20) < 1e-9);
-            });
-            test("Kimi prefers ratio pools and falls back to counts and rate-limit windows", () => {
-                var s = Parsers.Kimi(J.Parse("{\"user\":{\"membership\":{\"level\":\"LEVEL_BASIC\"}},\"usages\":{\"limit_7d\":{\"used_ratio\":0.25,\"reset_time\":\"2026-10-03T00:00:00Z\"}},\"usage\":{\"limit\":\"2048\",\"used\":\"214\"},\"limits\":[{\"window\":{\"duration\":300,\"timeUnit\":\"TIME_UNIT_MINUTE\"},\"detail\":{\"limit\":\"200\",\"used\":\"139\",\"resetTime\":\"2026-10-01T05:00:00Z\"}}]}"));
-                Require(s.Plan == "Kimi Moderato" && s.Quotas.Count == 2 && s.Quotas.First(q => q.Label == "每周").Used == 25 && Math.Abs(s.Quotas.First(q => q.Label == "5 小时").Used - 69.5) < 1e-9);
-                var legacy = Parsers.Kimi(J.Parse("{\"usage\":{\"limit\":\"2048\",\"remaining\":\"1834\",\"resetTime\":\"2026-10-03T00:00:00Z\"}}"));
-                Require(legacy.Quotas.Count == 1 && Math.Abs(legacy.Quotas[0].Used - 214.0 / 2048 * 100) < 1e-9 && legacy.Quotas[0].WindowSeconds == 604800);
-            });
-            test("OpenCode Go reads percent aliases and relative resets", () => {
-                var now = new DateTime(2026, 9, 29, 0, 0, 0, DateTimeKind.Utc);
-                var s = Parsers.OpenCode(J.Parse("{\"usage\":{\"rolling\":{\"percent\":12.5,\"resetInSec\":3600},\"weekly\":{\"usagePercent\":40,\"resetAt\":\"2026-10-03T00:00:00Z\"},\"monthly\":null}}"), now);
-                Require(s.Quotas.Count == 2 && s.Quotas[0].Used == 12.5 && s.Quotas[0].ResetUtc.StartsWith("2026-09-29T01:00") && s.Quotas[1].Used == 40);
-                bool threw = false; try { Parsers.OpenCode(J.Parse("{\"usage\":{}}"), now); } catch (ProviderException) { threw = true; } Require(threw);
-            });
-            test("GLM Coding Plan (ZCode) maps units, counts and the MCP allowance", () => {
-                var s = Parsers.Zai(J.Parse("{\"success\":true,\"code\":200,\"data\":{\"planName\":\"Pro\",\"limits\":[{\"type\":\"TOKENS_LIMIT\",\"unit\":3,\"number\":5,\"percentage\":10,\"usage\":1000,\"currentValue\":300,\"remaining\":700,\"nextResetTime\":1790675446000},{\"type\":\"TOKENS_LIMIT\",\"unit\":6,\"number\":1,\"percentage\":7},{\"type\":\"TIME_LIMIT\",\"unit\":5,\"number\":1,\"percentage\":2},{\"type\":\"OTHER\",\"unit\":1,\"number\":1,\"percentage\":50}]}}"));
-                Require(s.Plan == "GLM Pro" && s.Quotas.Count == 3 && s.Quotas[0].Label == "5 小时" && s.Quotas[0].Used == 30 && s.Quotas[0].WindowSeconds == 18000 && s.Quotas[0].ResetUtc.StartsWith("2026-09-29"));
-                Require(s.Quotas[1].Label == "每周" && s.Quotas[1].Used == 7 && s.Quotas[2].Label.StartsWith("MCP") && s.Quotas[2].WindowSeconds == 0);
-                bool threw = false; try { Parsers.Zai(J.Parse("{\"success\":false,\"msg\":\"token invalid\"}")); } catch (ProviderException) { threw = true; } Require(threw);
             });
             test("Custom provider definitions are validated before any request", () => {
                 var p = CustomProviders.Parse("{\"name\":\"My Gateway\",\"url\":\"https://api.example.com/usage\",\"auth\":\"bearer\",\"windows\":[{\"label\":\"每日\",\"used\":\"d.used\",\"limit\":\"d.limit\"}]}");
@@ -752,36 +647,12 @@ namespace CodeUsageMonit {
                 var day = new DayUsage { Day = "2026-01-01", Agent = "codex", Models = { new ModelUsage { Model = "test-a", Tokens = 91 }, new ModelUsage { Model = "test-b", Tokens = 10 } } };
                 Require(UsageDetails.MainModel(new[] { day }) == "test-a");
             });
-            test("Grok turns: per-model usage, cached input split out, recorded cost wins, event ids dedupe", () => {
-                string line = "{\"timestamp\":1750000000,\"params\":{\"sessionId\":\"sess-1\",\"update\":{\"sessionUpdate\":\"turn_completed\",\"usage\":{\"modelUsage\":{\"grok-4.5-build\":{\"inputTokens\":100,\"outputTokens\":20,\"cachedReadTokens\":40,\"reasoningTokens\":10,\"costUsdTicks\":12345678901}}}},\"_meta\":{\"eventId\":\"evt-1\"}}}";
-                var index = new LogIndex(); var file = new LogFile();
-                AgentLogs.GrokLine(index, file, line, "s", null); AgentLogs.GrokLine(index, file, line, "s", null);
-                Bucket b = file.Hours["2025061515||grok-4.5-build"];
-                Require(b.I == 60 && b.C == 40 && b.O == 20 && b.R == 1 && Math.Abs(b.D - 1.2345678901) < 1e-12);
-            });
-            test("Kimi wire records: old StatusUpdate and new turn-scoped usage.record", () => {
-                var index = new LogIndex(); var file = new LogFile();
-                AgentLogs.KimiLine(index, file, "{\"timestamp\":1770983427.123,\"message\":{\"type\":\"StatusUpdate\",\"payload\":{\"token_usage\":{\"input_other\":100,\"output\":50,\"input_cache_read\":10,\"input_cache_creation\":20},\"message_id\":\"msg-1\"}}}", "kimi-for-coding", "s", DateTime.UtcNow);
-                AgentLogs.KimiLine(index, file, "{\"type\":\"usage.record\",\"model\":\"kimi-code/kimi-for-coding\",\"usage\":{\"inputOther\":3064,\"output\":76,\"inputCacheRead\":14848,\"inputCacheCreation\":0},\"usageScope\":\"turn\",\"time\":1782113184943}", "x", "s", DateTime.UtcNow);
-                AgentLogs.KimiLine(index, file, "{\"type\":\"usage.record\",\"model\":\"kimi-code/kimi-for-coding\",\"usage\":{\"inputOther\":5000,\"output\":200},\"usageScope\":\"session\",\"time\":1782113185000}", "x", "s", DateTime.UtcNow);
-                Bucket old = file.Hours["2026021311||kimi-for-coding"];
-                Require(old.I == 100 && old.O == 50 && old.C == 10 && old.W == 20 && file.Hours.Count == 2 && file.Hours.Values.Sum(v => v.R) == 2);
-            });
-            test("Pi assistant messages: a total-only record becomes output, copies count once", () => {
-                var index = new LogIndex(); var file = new LogFile();
-                string line = "{\"type\":\"message\",\"timestamp\":\"2026-01-02T00:00:00.000Z\",\"message\":{\"role\":\"assistant\",\"model\":\"gpt-5\",\"usage\":{\"totalTokens\":333}}}";
-                MoreAgentLogs.PiLine(index, file, line); MoreAgentLogs.PiLine(index, file, line);
-                Bucket b = file.Hours["2026010200||gpt-5"]; Require(b.O == 333 && b.R == 1);
-            });
-            test("Antigravity desktop response parses measured model quotas", () => {
-                var state = LocalAntigravity.Parse(J.Parse("{\"userStatus\":{\"cascadeModelConfigData\":{\"clientModelConfigs\":[{\"label\":\"test-model\",\"quotaInfo\":{\"remainingFraction\":0.6,\"resetTime\":\"2026-01-20T00:00:00Z\"}}]}}}")); Require(state.Quotas.Count == 1 && state.Quotas[0].Remaining == 60);
-            });
             test("Installed copies use the per-user directory; zip copies and portable.txt stay beside the exe", () => {
-                string root = Path.Combine(Path.GetTempPath(), "codeusagemonit-data-" + Guid.NewGuid().ToString("N"));
-                string user = Path.Combine(root, "userdir");
+                string root = Path.Combine(Path.GetTempPath(), "headroom-data-" + Guid.NewGuid().ToString("N"));
+                string user = Path.Combine(root, "userdir"), legacy = Path.Combine(root, "legacy");
                 Directory.CreateDirectory(root);
                 try {
-                    Require(Store.PathsEqual(Store.UserDataDirectory(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "codeusagemonit")));
+                    Require(Store.PathsEqual(Store.UserDataDirectory(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Headroom")));
                     Require(!Store.PathsEqual(null, root) && !Store.PathsEqual("  ", root));
                     Require(Store.PathsEqual(root + Path.DirectorySeparatorChar, root));
                     Require(Store.NormalizeDirectory("C:\\") == "C:\\");
@@ -800,7 +671,14 @@ namespace CodeUsageMonit {
                     Directory.CreateDirectory(Path.Combine(beside, "nested"));
                     File.WriteAllText(Path.Combine(beside, "nested", "a.txt"), "a");
                     File.WriteAllText(Path.Combine(root, "installed.txt"), "installed");
-                    string chosen = Store.ChooseDataFor(root, "", null, user);
+                    // The pre-rename per-user folder wins over a data folder beside the exe.
+                    Directory.CreateDirectory(legacy);
+                    File.WriteAllText(Path.Combine(legacy, "settings.json"), "{\"legacy\":true}");
+                    string chosen = Store.ChooseDataFor(root, "", null, user, legacy);
+                    Require(Store.PathsEqual(chosen, user) && !Directory.Exists(legacy) && Directory.Exists(beside));
+                    Require(File.ReadAllText(Path.Combine(user, "settings.json")) == "{\"legacy\":true}");
+                    Directory.Delete(user, true);
+                    chosen = Store.ChooseDataFor(root, "", null, user, legacy);
                     Require(Store.PathsEqual(chosen, user));
                     Require(File.ReadAllText(Path.Combine(user, "settings.json")) == "{\"kept\":true}");
                     Require(File.ReadAllText(Path.Combine(user, "nested", "a.txt")) == "a");
@@ -812,7 +690,7 @@ namespace CodeUsageMonit {
                 } finally { try { Directory.Delete(root, true); } catch { } }
             });
             test("A linked data directory is copied and the link is left in place", () => {
-                string root = Path.Combine(Path.GetTempPath(), "codeusagemonit-link-" + Guid.NewGuid().ToString("N"));
+                string root = Path.Combine(Path.GetTempPath(), "headroom-link-" + Guid.NewGuid().ToString("N"));
                 string real = Path.Combine(root, "real"); string link = Path.Combine(root, "data"); string user = Path.Combine(root, "user");
                 Directory.CreateDirectory(real);
                 File.WriteAllText(Path.Combine(real, "settings.json"), "{}");

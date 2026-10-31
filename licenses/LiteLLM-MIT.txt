@@ -1,5 +1,5 @@
 Applies to: model_prices_and_context_window.json from https://github.com/BerriAI/litellm,
-from which codeusagemonit's pricing.json is compiled.
+from which Headroom's pricing.json is compiled.
 
 Portions of this software are licensed as follows:
 

@@ -1,6 +1,12 @@
 # Third-party notices
 
-codeusagemonit is an independent Windows application. It is not an official release of CodexBar or ccusage and is not affiliated with any monitored service. It contains no code or binaries from the projects below. The files taken from another project are the provider logo SVGs in `icons/` (from CodexBar, see below) and the Simplified Chinese Inno Setup translation `source/Windows/installer/ChineseSimplified.isl` (see below). The other projects are credited because their public source was studied as a reference, or because data derived from them ships with the application.
+余量 Headroom is an independent Windows application, forked from codeusagemonit (see below). It is not an official release of CodexBar or ccusage and is not affiliated with any monitored service. It contains no code or binaries from the projects below. The files taken from another project are the provider logo SVGs in `icons/` (from CodexBar, see below) and the Simplified Chinese Inno Setup translation `source/Windows/installer/ChineseSimplified.isl` (see below). The other projects are credited because their public source was studied as a reference, or because data derived from them ships with the application.
+
+## Upstream project
+
+### codeusagemonit
+- https://github.com/fanchengliu/codeusagemonit — MIT, Copyright (c) 2026 codeusagemonit contributors (kept in `LICENSE`).
+- Headroom started as a fork of it and keeps its local usage engine, pricing, data-directory handling, installer and the Claude / Codex quota readers. Version history up to 1.0.2 is in `CHANGELOG.md`. The adapters for other platforms were removed in 2.1.0.
 
 ## Data that ships with the application
 
@@ -28,7 +34,7 @@ The WebView2 runtime itself is part of Windows 11 and is not shipped.
 
 ## Provider logos
 
-The files in `icons/` are the logos of the monitored products, used unmodified only to identify each provider. They are taken from CodexBar (`Sources/CodexBar/Resources/ProviderIcon-<id>.svg`, MIT, Copyright (c) 2026 Peter Steinberger, license text in `licenses/CodexBar-MIT.txt`; `zcode.svg` is `ProviderIcon-zai.svg`). `agnes.svg` is the Agnes AI mark from lobe-icons (https://github.com/lobehub/lobe-icons, MIT), taken from usage-dash (`hooks/catalog.ts`) without its enclosing disc. The logos and product names are trademarks of their respective owners; their use does not imply endorsement.
+The files in `icons/` are the logos of the monitored products, used unmodified only to identify each provider. They are taken from CodexBar (`Sources/CodexBar/Resources/ProviderIcon-<id>.svg`, MIT, Copyright (c) 2026 Peter Steinberger, license text in `licenses/CodexBar-MIT.txt`). `agnes.svg` is the Agnes AI mark from lobe-icons (https://github.com/lobehub/lobe-icons, MIT), taken from usage-dash (`hooks/catalog.ts`) without its enclosing disc. The logos and product names are trademarks of their respective owners; their use does not imply endorsement.
 
 ## Installer translation
 
@@ -43,17 +49,17 @@ The files in `icons/` are the logos of the monitored products, used unmodified o
 
 ### usage-dash
 - https://github.com/chinbor/usage-dash — MIT, Copyright (c) 2026 chinbor. License text: `licenses/usage-dash-MIT.txt`.
-- Studied `hooks/providers.ts` and `hooks/lib.ts` for the Agnes platform login, subscription endpoint and four quota-window fields. Independently implemented in C# in `AgnesPlan.cs`; no plugin configuration, tokens or runtime are bundled.
+- Studied `hooks/providers.ts` and `hooks/lib.ts` for the Agnes platform login, subscription endpoint and four quota-window fields. Independently implemented as the built-in recipe `platforms/agnes.json`, read by `CustomProviders.cs`; no plugin configuration, tokens or runtime are bundled.
 
 ### CodexBar
 - https://github.com/steipete/CodexBar — MIT, Copyright (c) 2026 Peter Steinberger. License text kept in `licenses/CodexBar-MIT.txt`.
-- The Windows application re-implements, in its own C#, the provider-overview idea and the published behaviour of the providers' quota endpoints (Codex windows and reset credits, Claude utilization, Antigravity local endpoints and agy usage report, DeepSeek balances, the Devin / Windsurf plan status and cached plan fields). Apart from the provider logos above, no CodexBar file is included.
+- The Windows application re-implements, in its own C#, the provider-overview idea and the published behaviour of the providers' quota endpoints (Codex windows and reset credits, Claude utilization, DeepSeek balances). Apart from the provider logos above, no CodexBar file is included.
 
 ### Claude Code Usage Monitor (CodeZeno)
 - https://github.com/CodeZeno/Claude-Code-Usage-Monitor — MIT. License text kept in `licenses/CodeZeno-MIT.txt`.
-- Studied for where Windows clients keep their sign-in state (Cursor `state.vscdb`, Antigravity Credential Manager target, Grok CLI session headers).
+- Studied upstream for where Windows clients keep their sign-in state. The adapters that used it (Cursor, Antigravity, Grok) were removed in 2.1.0; the credit stays.
 
 ### ccusage
-- https://github.com/ccusage/ccusage — studied for the local log formats of Claude Code, Codex, Antigravity, ZCode, Grok, Kimi, Pi, GitHub Copilot CLI and OpenCode, and their de-duplication rules. codeusagemonit reads those logs with its own engine (`LocalLogs.cs`, `AgentLogs.cs`, `MoreAgentLogs.cs`, `Pricing.cs`); ccusage is neither bundled nor called.
+- https://github.com/ccusage/ccusage — studied for the local log formats of Claude Code and Codex (upstream also for other agents) and their de-duplication rules. Headroom reads those logs with its own engine (`LocalLogs.cs`, `Pricing.cs`); ccusage is neither bundled nor called.
 
 Service names and brand names belong to their respective owners. No proprietary API credentials are bundled.

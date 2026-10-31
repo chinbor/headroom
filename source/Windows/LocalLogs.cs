@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Hourly usage from local agent logs: tokens by kind, requests and the API-equivalent
     // cost of each request at the time it was read. Only numbers, model names and file
     // names are stored, never message content.

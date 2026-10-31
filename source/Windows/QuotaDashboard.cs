@@ -15,7 +15,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Detail window opened from the taskbar summary or the tray: quota cards, consumption
     // charts and settings. Presentation only; no account reads or requests of its own.
     public sealed class QuotaDashboard : IDisposable {

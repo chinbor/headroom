@@ -2,6 +2,13 @@
 
 每个版本的这一节会写进 GitHub 发布说明的「本版更新」。1.0.2 及以前是上游 codeusagemonit 的记录。
 
+## 2.1.0
+
+- 程序改名为 `headroom.exe`，安装包和压缩包改名为 `headroom-setup-<版本>.exe`、`headroom-<版本>-win-x64.zip`，数据目录改为 `%LOCALAPPDATA%\Headroom`，环境变量改为 `HEADROOM_DATA`。
+- 从 2.0.1 升级不用手动处理：安装包原地替换并删掉旧的 `codeusagemonit.exe`；第一次启动时自动把 `%LOCALAPPDATA%\codeusagemonit` 搬到新目录，开机启动项也换成新的。PowerShell 安装的会把 `Programs\codeusagemonit` 连同数据改名为 `Programs\Headroom`。
+- 删除了不再提供的 Cursor、Copilot、Grok、Kimi、Devin、Antigravity、OpenCode、Pi、ZCode 的读取代码、图标和文档，以及不再使用的界面文案和脚本；程序更小，行为不变。
+- 模型价目表改从本项目仓库同步。
+
 ## 2.0.1
 
 - 最大化、还原和最小化恢复系统动画，放大时不再闪白；窗口尺寸变化只重新排版，跨过布局分界点才重建页面。

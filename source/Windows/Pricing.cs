@@ -8,7 +8,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // API list prices for estimating what local usage would cost on the vendors' APIs.
     // The table (pricing.json next to the executable, USD per million tokens) is compiled
     // from the public LiteLLM and models.dev catalogs; nothing here calls another tool.
@@ -101,7 +101,7 @@ namespace CodeUsageMonit {
         // (a plain GET with an ETag; no account or usage data is sent), checks it, stores it
         // as data/pricing.json and switches to it. Offline, or with the setting off, the
         // bundled table stays in use. Returns true when newer prices were installed.
-        public static string SyncUrl = "https://raw.githubusercontent.com/fanchengliu/codeusagemonit/main/source/Windows/pricing.json";
+        public static string SyncUrl = "https://raw.githubusercontent.com/chinbor/headroom/main/source/Windows/pricing.json";
         public sealed class SyncState { public string Checked = "", ETag = "", Result = ""; }
         public static async Task<bool> SyncAsync(AppConfig config, bool force = false) {
             if (config == null || !config.PriceSync) return false;
@@ -225,7 +225,7 @@ namespace CodeUsageMonit {
         }
 
         // ── Cost of one request ───────────────────────────────────────────
-        // Claude-shaped usage (Claude Code, Antigravity, ZCode, Grok, Kimi, …). A 1-hour
+        // Claude-shaped usage (Claude Code, DeepSeek harness, …). A 1-hour
         // cache write costs twice the input rate.
         public static double Cost(ModelPrice p, TokenUse u) {
             if (p == null) return 0;

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Upload codeusagemonit-setup-<version>.exe to the GitHub release for AssemblyVersion. A published release keeps its existing zip and SHA256SUMS.txt.
+        description: Upload headroom-setup-<version>.exe to the GitHub release for AssemblyVersion. A published release keeps its existing zip and SHA256SUMS.txt.
         type: boolean
         default: false
   push:
@@ -61,7 +61,7 @@ jobs:
           # VERIFICATION.md. Nothing else is searched for, so no figures are kept here.
           $ErrorActionPreference = 'Stop'
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $zip = Get-ChildItem -LiteralPath dist -Filter 'codeusagemonit-*-win-x64.zip' | Select-Object -First 1
+          $zip = Get-ChildItem -LiteralPath dist -Filter 'headroom-*-win-x64.zip' | Select-Object -First 1
           if (-not $zip) { throw 'No portable zip in dist.' }
           $repoManual = [System.IO.File]::ReadAllBytes((Join-Path (Get-Location) '使用说明.md'))
           $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
@@ -82,8 +82,8 @@ jobs:
         with:
           name: windows-release
           path: |
-            dist/codeusagemonit-setup-*.exe
-            dist/codeusagemonit-*-win-x64.zip
+            dist/headroom-setup-*.exe
+            dist/headroom-*-win-x64.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -95,14 +95,14 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $setup = Get-ChildItem -LiteralPath dist -Filter 'codeusagemonit-setup-*.exe' | Select-Object -First 1
-          if ($setup.Name -notmatch '^codeusagemonit-setup-(.+)\.exe$') { throw "Unexpected setup name: $($setup.Name)" }
+          $setup = Get-ChildItem -LiteralPath dist -Filter 'headroom-setup-*.exe' | Select-Object -First 1
+          if ($setup.Name -notmatch '^headroom-setup-(.+)\.exe$') { throw "Unexpected setup name: $($setup.Name)" }
           $ver = $Matches[1]
           $tag = "v$ver"
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $tag) {
             throw "Tag $($env:GITHUB_REF_NAME) does not match AssemblyVersion $ver. Bump AssemblyVersion in source/Windows/App.cs first."
           }
-          $zip = Join-Path (Get-Location) "dist\codeusagemonit-$ver-win-x64.zip"
+          $zip = Join-Path (Get-Location) "dist\headroom-$ver-win-x64.zip"
           $sums = Join-Path (Get-Location) 'dist\SHA256SUMS.txt'
           if (-not (Test-Path -LiteralPath $zip)) { throw "Missing $zip" }
 

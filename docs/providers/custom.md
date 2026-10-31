@@ -1,8 +1,8 @@
 # 自定义接口
 
-[← 返回项目](../../README.md) · [下载](https://github.com/fanchengliu/codeusagemonit/releases)
+[← 返回项目](../../README.md) · [下载](https://github.com/chinbor/headroom/releases)
 
-> 适用于 codeusagemonit 1.0.0。连接方式：**API Key · 自定义**。
+> 适用于 余量 Headroom 2.1.0。连接方式：**API Key · 自定义**。
 
 ## 数据来源
 
@@ -37,4 +37,4 @@
 
 ## 实现位置
 
-`source/Windows/`：`CustomProviders.cs`、`Settings.cs`、`Connect.cs`。本文依据该版本代码核对；服务商接口或客户端格式变化时可能需要更新。
+`source/Windows/`：`CustomProviders.cs`、`ConsoleLogin.cs`、`SimpleSettings.cs`。本文依据该版本代码核对；服务商接口或客户端格式变化时可能需要更新。

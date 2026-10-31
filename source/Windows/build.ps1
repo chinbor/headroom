@@ -64,7 +64,7 @@ $webView2Dir = Join-Path $PSScriptRoot 'lib\webview2'
 $webView2Assemblies = @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.Wpf.dll')
 $webView2Files = $webView2Assemblies + @('WebView2Loader.dll')
 $sources = @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.cs' | Select-Object -ExpandProperty FullName)
-foreach ($target in @(,@('winexe', 'codeusagemonit.exe', 'CodeUsageMonit.Program'))) {
+foreach ($target in @(,@('winexe', 'headroom.exe', 'Headroom.Program'))) {
   $arguments = @('/nologo',('/target:'+$target[0]),'/platform:x64','/optimize+','/utf8output','/codepage:65001','/langversion:5',('/main:'+$target[2]),('/out:'+(Join-Path $OutputDirectory $target[1])),('/win32icon:'+$iconPath),('/win32manifest:'+(Join-Path $PSScriptRoot 'app.manifest')))
   foreach($reference in $references) { $arguments += '/reference:'+(Join-Path $compilerRoot $reference) }
   # WebView2 SDK (the sign-in window for platforms read with a web console token).
@@ -84,7 +84,7 @@ $platformDir = Join-Path $OutputDirectory 'platforms'
 New-Item -ItemType Directory -Path $platformDir -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'platforms') -Filter '*.json' | Copy-Item -Destination $platformDir -Force
 foreach ($name in $webView2Files) { Copy-Item -LiteralPath (Join-Path $webView2Dir $name) -Destination (Join-Path $OutputDirectory $name) -Force }
-Write-Output ('Built '+(Join-Path $OutputDirectory 'codeusagemonit.exe'))
+Write-Output ('Built '+(Join-Path $OutputDirectory 'headroom.exe'))
 
 function Find-InnoCompiler {
   $candidates = @(
@@ -104,10 +104,10 @@ function Get-AppVersion {
 }
 function New-PortableZip([string]$OutDir, [string]$RepoRoot, [string]$Version) {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
-  $stage = Join-Path ([System.IO.Path]::GetTempPath()) ('codeusagemonit-zip-' + [Guid]::NewGuid().ToString('N'))
+  $stage = Join-Path ([System.IO.Path]::GetTempPath()) ('headroom-zip-' + [Guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $stage | Out-Null
   try {
-    foreach ($name in @('codeusagemonit.exe', 'app.ico', 'pricing.json') + $webView2Files) {
+    foreach ($name in @('headroom.exe', 'app.ico', 'pricing.json') + $webView2Files) {
       Copy-Item -LiteralPath (Join-Path $OutDir $name) -Destination (Join-Path $stage $name)
     }
     $iconStage = Join-Path $stage 'icons'
@@ -121,12 +121,12 @@ function New-PortableZip([string]$OutDir, [string]$RepoRoot, [string]$Version) {
     }
     Copy-Item -LiteralPath (Join-Path $RepoRoot 'source') -Destination (Join-Path $stage 'source') -Recurse
     # Maintainer checklist only. Not required to build or run, and not shipped.
-    # setup.exe never copies source/ (see installer/codeusagemonit.iss).
+    # setup.exe never copies source/ (see installer/headroom.iss).
     $verificationNotes = Join-Path $stage 'source\Windows\VERIFICATION.md'
     if (Test-Path -LiteralPath $verificationNotes) { Remove-Item -LiteralPath $verificationNotes -Force }
     if (Test-Path -LiteralPath $verificationNotes) { throw 'Portable zip must not ship source\Windows\VERIFICATION.md.' }
     if (Test-Path -LiteralPath (Join-Path $stage 'installed.txt')) { throw 'Portable zip must not ship installed.txt next to the executable.' }
-    $zip = Join-Path $OutDir ('codeusagemonit-' + $Version + '-win-x64.zip')
+    $zip = Join-Path $OutDir ('headroom-' + $Version + '-win-x64.zip')
     if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
     [System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
     return $zip
@@ -138,19 +138,19 @@ if ($Installer) {
   $out = [System.IO.Path]::GetFullPath($OutputDirectory)
   $repoRoot = [System.IO.Path]::GetFullPath((Split-Path (Split-Path $PSScriptRoot -Parent) -Parent))
   $version = Get-AppVersion
-  foreach ($name in @('codeusagemonit.exe', 'app.ico', 'pricing.json') + $webView2Files) {
+  foreach ($name in @('headroom.exe', 'app.ico', 'pricing.json') + $webView2Files) {
     if (-not (Test-Path -LiteralPath (Join-Path $out $name))) { throw ('Missing build output: ' + $name) }
   }
   $zip = New-PortableZip $out $repoRoot $version
   $iscc = Find-InnoCompiler
-  $iss = Join-Path $PSScriptRoot 'installer\codeusagemonit.iss'
+  $iss = Join-Path $PSScriptRoot 'installer\headroom.iss'
   $isl = Join-Path $PSScriptRoot 'installer\ChineseSimplified.isl'
   if (-not (Test-Path -LiteralPath $isl)) { throw 'Missing source\Windows\installer\ChineseSimplified.isl.' }
   $buildDirArg = '/DBuildDir="' + ($out -replace '"', '') + '"'
   $repoArg = '/DRepoRoot="' + ($repoRoot -replace '"', '') + '"'
   & $iscc ('/DMyAppVersion=' + $version) $buildDirArg $repoArg $iss
   if ($LASTEXITCODE -ne 0) { throw ('Inno Setup compile failed (' + $LASTEXITCODE + ').') }
-  $setup = Join-Path $out ('codeusagemonit-setup-' + $version + '.exe')
+  $setup = Join-Path $out ('headroom-setup-' + $version + '.exe')
   if (-not (Test-Path -LiteralPath $setup)) { throw ('Installer was not written to ' + $setup) }
   $sums = Join-Path $out 'SHA256SUMS.txt'
   $lines = @(

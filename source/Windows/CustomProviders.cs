@@ -11,7 +11,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Platform recipes (接入方案): a JSON description of how to read one platform — the quota
     // request and its field paths, an optional daily-usage request, how the user gets the token
     // (drives the in-app guide) and which response codes mean success or an expired token.

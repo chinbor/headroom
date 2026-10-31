@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Zstandard decompression (RFC 8878) for logs other tools write compressed: DeepSeek
     // Harness appends its sessions as zstd frames. .NET Framework has no zstd of its own.
     // Decoding only; no dictionaries (none of the logs use one); content checksums are skipped.

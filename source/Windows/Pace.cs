@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Where a quota window stands against time: how much of the window has passed, how much
     // would be left if it were used evenly (the pace mark on the bar), and when it runs out
     // at the rate used so far. Only for windows with a known length and reset time.

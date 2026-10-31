@@ -9,14 +9,12 @@ auth.json
 settings.json
 quota-cache.json
 
-# Locally built executables. The licensed statistics tool and portable ZIP are intentional.
+# Locally built executables and packages.
+/headroom.exe
 /codeusagemonit.exe
-/codeusage.exe
-/codeusagemonit-setup-*.exe
-/codeusagemonit-*-win-x64.zip
+/headroom-setup-*.exe
+/headroom-*-win-x64.zip
 /SHA256SUMS.txt
-/UiRegression.exe
-/Panel.xaml
 /app.ico
 bin/
 obj/

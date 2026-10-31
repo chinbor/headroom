@@ -17,8 +17,8 @@ using Drawing = System.Drawing;
 
 [assembly: AssemblyTitle("余量 Headroom")]
 [assembly: AssemblyDescription("A Windows taskbar monitor for AI subscription quotas and local token usage")]
-[assembly: AssemblyVersion("2.0.1.0")]
-namespace CodeUsageMonit {
+[assembly: AssemblyVersion("2.1.0.0")]
+namespace Headroom {
     public static class Program {
         private static Mutex mutex;
         private static EventWaitHandle showEvent;
@@ -26,12 +26,12 @@ namespace CodeUsageMonit {
         // --side-by-side: a second copy (another folder, its own data) beside the installed one,
         // e.g. to try a new build. It never touches the autostart entry.
         public static bool SideBySide, DemoAll;
-        // The name people see (windows, tray, notifications); file and folder names stay as they are.
+        // The name people see (windows, tray, notifications); files, folders and registry use "Headroom".
         public const string AppName = "余量 Headroom";
         [STAThread] public static int Main(string[] args) {
             if (args.Contains("--demo") && args.Contains("--probe")) return 2;
             SideBySide = args.Contains("--side-by-side"); DemoAll = args.Contains("--demo-all");
-            string instance = @"Local\codeusagemonit" + (args.Contains("--demo") ? ".Preview" : SideBySide ? ".SideBySide" : "");
+            string instance = @"Local\Headroom" + (args.Contains("--demo") ? ".Preview" : SideBySide ? ".SideBySide" : "");
             if (args.Contains("--quit")) { try { using (var signal = EventWaitHandle.OpenExisting(instance + ".Quit")) signal.Set(); } catch (WaitHandleCannotBeOpenedException) { } return 0; }
             if (args.Contains("--self-test")) return SelfTests.Run();
             if (args.Contains("--probe")) return Probe().GetAwaiter().GetResult();
@@ -39,6 +39,7 @@ namespace CodeUsageMonit {
             bool created; mutex = new Mutex(true, instance + ".Instance", out created);
             showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, instance + ".Show");
             if (!created) { showEvent.Set(); showEvent.Dispose(); mutex.Dispose(); return 0; }
+            if (!SideBySide && !args.Contains("--demo")) MonitorPanel.MigrateStartup();
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             app.DispatcherUnhandledException += delegate(object sender, DispatcherUnhandledExceptionEventArgs e) {
                 try { File.AppendAllText(System.IO.Path.Combine(Store.Data, "errors.log"), DateTime.UtcNow.ToString("o") + " " + e.Exception.GetType().Name + " " + e.Exception.Message + "\n"); } catch { }
@@ -117,7 +118,7 @@ namespace CodeUsageMonit {
         private IEnumerable<string> EnabledIds() { return ProviderCatalog.All.Where(config.Enabled.Contains); }
         private List<ProviderState> SubscriptionStates() {
             string[] order = config.SubscriptionOrder ?? new string[0];
-            return EnabledIds().Where(id => !ProviderCatalog.LocalOnly(id) && states.ContainsKey(id))
+            return EnabledIds().Where(id => states.ContainsKey(id))
                 .OrderBy(id => { int at = Array.IndexOf(order, id); return at < 0 ? Int32.MaxValue : at; }).Select(id => states[id]).ToList();
         }
         // From the taskbar summary when it is shown (the flyout opens above it), else bottom-right.
@@ -369,10 +370,23 @@ namespace CodeUsageMonit {
         private static Brush Brush(string color) { var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(color); brush.Freeze(); return brush; }
         private FrameworkElement Icon(string id, double size) {
             string data; if (icons.TryGetValue(id, out data)) { try { return new System.Windows.Shapes.Path { Data = Geometry.Parse(data), Fill = Brush(ProviderCatalog.Color(id)), Stretch = Stretch.Uniform, Width = size, Height = size }; } catch { } }
-            return new TextBlock { Text = id == "antigravity" ? "Λ" : id == "grok" ? "𝕏" : ProviderCatalog.Name(id).Substring(0, 1), FontSize = size - 2, Width = size, Height = size, TextAlignment = TextAlignment.Center, Foreground = Brush(ProviderCatalog.Color(id)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            return new TextBlock { Text = ProviderCatalog.Name(id).Substring(0, 1), FontSize = size - 2, Width = size, Height = size, TextAlignment = TextAlignment.Center, Foreground = Brush(ProviderCatalog.Color(id)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         }
-        private bool StartupEnabled() { using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) return key != null && key.GetValue("codeusagemonit") != null; }
-        private void SetStartup(bool enabled) { if (Program.SideBySide) return; using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) { if (enabled) key.SetValue("codeusagemonit", "\"" + System.IO.Path.Combine(Store.Root, "codeusagemonit.exe") + "\" --background"); else key.DeleteValue("codeusagemonit", false); } }
+        private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run", RunValue = "Headroom", LegacyRunValue = "codeusagemonit";
+        private static string StartupCommand() { return "\"" + System.IO.Path.Combine(Store.Root, "headroom.exe") + "\" --background"; }
+        private bool StartupEnabled() { using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey)) return key != null && key.GetValue(RunValue) != null; }
+        private void SetStartup(bool enabled) { if (Program.SideBySide) return; using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey)) { if (enabled) key.SetValue(RunValue, StartupCommand()); else key.DeleteValue(RunValue, false); } }
+        // Versions up to 2.0.1 were codeusagemonit.exe with a "codeusagemonit" autostart entry:
+        // replace that entry with one for this exe, so starting with Windows carries over.
+        internal static void MigrateStartup() {
+            try {
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey, true)) {
+                    if (key == null || key.GetValue(LegacyRunValue) == null) return;
+                    key.DeleteValue(LegacyRunValue, false);
+                    if (key.GetValue(RunValue) == null) key.SetValue(RunValue, StartupCommand());
+                }
+            } catch { }
+        }
         public void Quit() { SaveConfig(); taskbarPanel.Dispose(); quotaDashboard.Dispose(); tray.Visible = false; app.Shutdown(); }
         public void Dispose() { quotaDashboard.Dispose(); taskbarPanel.Dispose(); refreshTimer.Stop(); foreach (var watcher in watchers) watcher.Dispose(); tray.Visible = false; tray.Dispose(); }
     }

@@ -1,111 +1,59 @@
-# codeusagemonit for Windows — 1.1
+# Headroom for Windows — source
 
-A single-tray Windows monitor for the quotas and local usage of AI coding assistants (Codex, Claude, Cursor, Antigravity, DeepSeek, Grok, GitHub Copilot, Kimi Code, OpenCode, ZCode, Pi and user-defined HTTP providers). It is an independent C# / WPF implementation. CodexBar and ccusage were studied as references (interaction ideas, provider endpoints, log formats); none of their code or binaries is included. The provider logos in `icons/` are the products' own logos, taken from CodexBar's resources (MIT) — see `THIRD-PARTY-NOTICES.md`.
+余量 Headroom is a Windows 11 taskbar widget for AI subscription quotas: Claude, Codex, DeepSeek, Agnes and user-written platform recipes. It is a C# 5 / WPF application built with the .NET Framework compiler that ships with Windows (no Visual Studio). It started as a fork of [codeusagemonit](https://github.com/fanchengliu/codeusagemonit) and keeps its local usage engine, pricing and the Claude / Codex quota readers; see `THIRD-PARTY-NOTICES.md`.
 
-## Window and appearance
+## Files
 
-- One visual system in `Panel.xaml`: a smoked surface over DWM Acrylic, neutral ink, one cool accent (`#5CC8E0`), provider colours only in data. Cards, switches, segmented controls, text fields, slider, scrollbar and tooltips are all styled there.
-- **Surface colour and interface transparency** (`ColorPicker.cs`): a palette with 10 dark presets, a saturation/brightness square, hue and transparency strips and a hex field (`SurfaceColor`, `#RRGGBB`); transparency 0–100 % (0 = opaque) is shared with the slider. The colour tints the layer over the system blur, the picture dim layer and the popups. Text stays light, so the palette shows the WCAG contrast ratio and warns below 4.5 : 1. The old Mica / "solid" materials are migrated (solid → 0 %).
-- **Background picture** (`Appearance.cs`): Settings → 外观 → 选择图片… copies the picture to `data/background.<ext>` (no database; one local file, ≤ 40 MB, decoded at ≤ 2560 px), with fill / fit / tile and a 0–85 % dim scrim. It is shown on every display size, under the transparency layer. 移除 deletes the copy.
-- The provider strip is a single row and only lists enabled providers; providers needing attention get an amber dot.
-- Quota rows keep the user's segmented meter (24 cells, 2 px gaps, remaining fraction in the provider colour, warm colour below 10 %). In the full panel a quota row is a button: click to expand the exact reset time, window length and used share.
-- Settings open in their own window built from the same styles (the panel keeps its display size). Changes apply on Save; Cancel, close or Esc discards them. Transparency and the background picture preview live.
-- The window has no native caption: the header is dragged with `DragMove`, so right-clicking anywhere opens the display-size menu instead of the system menu. Drag any edge/corner to resize; Ctrl+wheel scales the interface (80–140 %).
-- Card headers: provider name, plan and refresh button share the first line; freshness and the (optionally masked) account share the second, right-aligned under the refresh button.
-- Every provider card and detail page has its own refresh button (`RefreshOne`); a per-provider fetch serial makes sure an older result never overwrites a newer one.
-- Providers that are not connected (or whose login expired) are connected from their own card (`Connect.cs`).
+| Area | Files |
+| --- | --- |
+| Entry, single instance, tray, refresh loop | `App.cs` (`Program`, `MonitorPanel`), `Pacing.cs` |
+| Taskbar summary, hover card, right-click panel, alerts | `TaskbarPanel.cs`, `TaskbarFlyout.cs`, `QuickMenu.cs`, `AlertCard.cs` |
+| Detail window (额度 / 消耗 / 设置) | `QuotaDashboard.cs`, `UsageCharts.cs`, `UsageDetails.cs`, `SimpleSettings.cs`, `Theme.cs` |
+| What a quota means (headline, pace, run-out) | `SubscriptionView.cs`, `Pace.cs` |
+| Settings, data directory, Claude / Codex readers | `Core.cs` (`AppConfig`, `Store`, `ProviderService`, `Parsers`) |
+| Platform recipes (DeepSeek, Agnes, custom) | `CustomProviders.cs`, `platforms/*.json`, `ConsoleLogin.cs` (WebView2 sign-in), `PlatformUsage.cs`, `BalanceSpend.cs` |
+| Local usage engine | `LocalLogs.cs` (Codex, Claude Code), `DeepSeekHarness.cs` + `Zstd.cs`, `UsageScan.cs`, `Timing.cs`, `Pricing.cs` + `pricing.json` |
+| Third-party endpoints (relays) | `ThirdParty.cs` |
+| Claude Code sign-in renewal | `SessionRecovery.cs`, `BackgroundCli.cs` |
+| Interface language | `I18n.cs`, `I18nTable.cs` (English keyed by the Chinese text) |
+| Self-tests | `Tests.cs`, `RecoveryTests.cs` |
 
-## Local usage engine (`LocalLogs.cs`, `AgentLogs.cs`, `MoreAgentLogs.cs`, `Pricing.cs`, `UsageScan.cs`)
-
-codeusagemonit reads each assistant's own local history and prices every request itself; nothing external is executed.
+## Local usage
 
 | Agent | Source read | Notes |
 | --- | --- | --- |
-| Codex | `CODEX_HOME` / `~/.codex/sessions`, `archived_sessions` (`*.jsonl`) | `last_token_usage`, or the difference of `total_token_usage`; model from `turn_context`; `service_tier` fast / priority multiplier (also the `config.toml` default); replayed prefixes of forked threads skipped; cross-file de-duplication |
-| Claude Code | `CLAUDE_CONFIG_DIR` / `~/.claude/projects`, `~/.config/claude/projects` | `message.id` + `requestId` de-duplication (else + timestamp); the larger copy of a streamed message wins; `costUSD` used when present; sidechain / advisor records |
-| Antigravity | `~/.gemini/antigravity*/conversations/*.db` (SQLite, protobuf metadata) | per-step usage, identity de-duplication |
-| ZCode | `ZCODE_HOME` / `~/.zcode/cli/db/db.sqlite` | completed `model_usage` rows |
-| Grok | `GROK_HOME` / `~/.grok/sessions/**/updates.jsonl` | `turn_completed`; recorded cost preferred |
-| Kimi | `KIMI_DATA_DIR` / `~/.kimi`, `~/.kimi-code` → `sessions/**/wire.jsonl` | `StatusUpdate` and `usage.record` |
-| Pi, GitHub Copilot CLI, OpenCode | session JSONL / OTEL spans / SQLite + JSON | ported from the documented formats; **no local data on the test machine** |
+| Codex | `CODEX_HOME` / `~/.codex/sessions`, `archived_sessions` (`*.jsonl`) | `last_token_usage`, or the difference of `total_token_usage`; model from `turn_context`; fast / priority multiplier |
+| Claude Code | `CLAUDE_CONFIG_DIR` / `~/.claude/projects`, `~/.config/claude/projects` | `message.id` + `requestId` de-duplication; the larger copy of a streamed message wins; `costUSD` used when present |
+| DeepSeek Harness | `~/.dsh/sessions/**/session.v4.jsonl.zstd` | zstd frames read incrementally |
 
-- Each agent has an hourly index `data/<agent>-logs.json` with buckets `yyyyMMddHH|provider|model` → fresh input, cache read, cache write, output, other tokens, requests, USD, unpriced tokens. Only counts are stored, never content. Scans are incremental (file size / offset); about 33 days of hours are retained. The index is rebuilt automatically when its version or the price table changes.
-- `pricing.json` (USD per million tokens, 361 models) is compiled from the public LiteLLM and models.dev catalogs. Lookup: exact → without provider prefix → without date suffix → `.`/`@` normalised → longest contained key (a version number is never continued: `gpt-5` does not match `gpt-5-4`). Rules: cache read / 5-minute and 1-hour cache write rates, whole-request long-context tiers (e.g. > 272K input), LiteLLM `above_200k` marginal tiers, Codex cached input at the input rate when no cached rate exists, fast / priority multipliers. Tokens of models without a price are counted and flagged ("部分模型没有价目").
-- **Output speed** (`Timing.cs`): every bucket also keeps TN / TO / TS — requests with a measured duration, their output tokens (reasoning included) and seconds, so speed = TO / TS is additive over any period, model or endpoint and is always shown **per agent**, never averaged across agents. Duration is request sent → last output written (time to first token, network and relay latency included). Claude Code: the entry the response answers (`parentUuid`) → the response's last block; Codex: the last tool output / user message → the response's last item (`response_item` timestamps, read from the line prefix without decoding tool output); ZCode: `started_at` → `completed_at`; Grok: `apiDurationMs` per turn; OpenCode: `time.created` → `time.completed` (unverified). Requests with < 50 output tokens or outside 0.2 s – 10 min are not timed.
-- `HistoryService.FromIndexes` derives the 30-day daily history (`data/history.json`, engine `native-1`). Past days keep the largest total ever observed, so pruned session files do not shrink history; days are grouped by the Windows time zone.
+- Each agent has an hourly index `data/<agent>-logs.json` (fresh input, cache read, cache write, output, requests, USD, unpriced tokens). Only counts and model names are stored, never content.
+- Platforms whose console reports daily usage (DeepSeek, Agnes) replace the local log days for that platform.
+- `pricing.json` is compiled from the public LiteLLM and models.dev catalogs (`tools/update-pricing.mjs`, refreshed by `.github/workflows/pricing.yml`); the app downloads the current copy from this repository once a day unless turned off.
+- Output speed = output tokens ÷ (request sent → last output written), kept per agent; replies under 50 tokens are not timed.
 
-## Periods and charts (`RangePicker.cs`, `Charts.cs`)
+## Data directory
 
-- Every usage view has a period button: 当天 / 近 24 小时 / 近 7 天 / 近 14 天 / 近 30 天, or a custom start and end (calendar + hour grid, "end follows now"). Presets apply at once; custom ranges apply on 确定. Hourly detail reaches back ~32 days.
-- Figures for the period: cost, tokens, requests, token composition, per-model list, and a chart — hourly bars when the period is ≤ 48 h, daily bars otherwise. Charts are stacked by model (provider pages) or by provider (overview).
-- Charts are interactive: date axis, hover tooltip, click a bar to pin its detail (date/hour, cost, tokens, speed, per-model or per-provider split), 费用 / Token toggle, plus 速度 on one agent's charts. Speed also appears as a fourth figure on provider pages, per model, in each overview card (last 7 days), on third-party endpoint cards and in `codeusage cost`. In the overview, the provider chips filter the chart and totals without rebuilding the quota cards.
-- The current quota window's usage is hour-accurate for every agent with an index; providers without local logs fall back to whole local days (a lower bound, shown as ≥).
+- **setup.exe**: `%LOCALAPPDATA%\Headroom`. The installer writes `installed.txt` next to the exe and `HKCU\Software\Headroom\InstallPath`; either selects the per-user directory, so Program Files stays read-only.
+- **Zip and `install.ps1`**: `<exe>\data`. `portable.txt` next to the exe forces this layout; `HEADROOM_DATA` overrides the directory unless `portable.txt` is present.
+- **`--demo`**: `<exe>\verification\demo-data`; the real directory is never read or migrated.
+- First start of an installed copy, while `%LOCALAPPDATA%\Headroom` is still empty: the pre-rename `%LOCALAPPDATA%\codeusagemonit` (versions up to 2.0.1) is moved in, otherwise an `<exe>\data` folder. A junction is copied and left in place. The old `codeusagemonit` autostart value is replaced by `Headroom`.
 
-## Display sizes
-
-One window, four sizes, one chosen at a time (`DisplaySize`): small, medium and large render into `CompactRoot` (`Compact.cs`); full is the panel (`ScaleRoot`). Defaults are 172×172, 360×180 and 360×430 at 100 % scale.
-
-- Every size is resizable within its own limits (`WindowFrame.MinSize` / `MaxSize`) and remembers its own geometry (`Layouts` in `settings.json`).
-- Every size has an overview page plus one page per enabled provider; switch with the icon strip, dots, mouse wheel or ←/→.
-- Interactions: per-provider refresh; click the headline to cycle quota windows (small / medium); click a window row to promote it (medium) or expand it (large); the medium size shows quota windows only (a single window adds pace, exact reset and reset credits; providers without quotas show 7-day / 30-day facts), charts are in the large and full sizes; click chart bars to read a day or hour; the large size has its own period button, cost / token / request figures and chart; connect a provider inline in the same size; ⋯ / right-click menu.
-- Compact sizes sit at the bottom of the z-order (a `WM_WINDOWPOSCHANGING` hook) unless "always on top" is on.
+Tokens read by a web sign-in are encrypted with DPAPI (`data/<platform id>.key`) and only sent to the hosts in the recipe. Auto proxy mode reads the Windows HTTP proxy, with HTTP(S)_PROXY as fallback.
 
 ## Command line
 
-`codeusage.exe` is compiled from the same sources (`/main:CodeUsageMonit.CliProgram`, console target) and shares the `data` folder: `status` (cached, offline), `usage` (live), `cost`, `thirdparty`, `providers`; `--provider`, `--all`, `--days`, `--refresh`, `--json`, `--no-color`. `cost --refresh` rescans the local logs with the same engine; `--json` includes requests, unpriced tokens and per-model cost.
+`headroom.exe [--background] [--demo] [--side-by-side] [--quit] [--self-test]`
 
-## Third-party endpoints (relays)
+- `--background` starts in the tray (the autostart entry uses it); `--quit` asks the running instance to exit.
+- `--demo` runs a separate instance on made-up data; `--side-by-side` runs a second copy with its own data that never touches autostart.
+- `--self-test` writes `verification\tests.json` and exits non-zero on a failure.
 
-Usage sent through third-party endpoints never moves the subscription meters, so it gets its own page, with **usage only** (relays do not publish their limits).
-
-- `ThirdParty.cs` attributes Codex / Claude buckets to endpoints: Codex by `session_meta.model_provider` plus a switch timeline; Claude Code by watching `settings.json` (`ANTHROPIC_BASE_URL`) and recording each switch (`data/endpoints.json`). Claude records without a request id are grouped as a "suspected relay".
-- API keys are never stored; a 6-hex SHA-256 fingerprint distinguishes accounts on one host. CC Switch's database is read only for provider names.
-- "Official-price reference" costs use the same per-request pricing and are not what a relay charges.
-
-## Provider connections
-
-| Provider | Source |
-| --- | --- |
-| Codex | Existing `CODEX_HOME/auth.json` or `~/.codex/auth.json`; quota and reset-credit endpoints |
-| Claude | Existing Claude Code login |
-| Cursor | Read-only editor `state.vscdb`; plan total / Auto / API, plus a Grok Bot weekly meter (`get-sand-usage-status`) when the included limit is non-zero. A failed extra call leaves the three plan meters up; 套餐总量 stays the headline |
-| Antigravity | An already-running same-user desktop language server with its local CSRF token, then the existing Google credential fallback |
-| DeepSeek | API key entered in Settings or `DEEPSEEK_API_KEY`; balances kept separate by currency |
-| Grok | Existing xAI Grok Build CLI login; one shared billing-period allowance, with validated Build / Chat consumption kept separate from remaining quota |
-| GitHub Copilot | In-app GitHub OAuth device flow (`read:user`), or a token already saved by an official Copilot client (read-only) |
-| Kimi Code | API key (`KIMI_CODE_API_KEY` or DPAPI-saved) |
-| OpenCode | OpenCode Go API key (`OPENCODE_API_KEY` or saved) |
-| ZCode | GLM Coding Plan API key (`Z_AI_API_KEY`, China aliases `BIGMODEL_API_KEY` …) |
-| Pi | No account quota; local logs only |
-
-The five newer providers are opt-in. Browser cookies are never imported.
-
-## Custom providers
-
-`CustomProviders.cs` implements a declarative HTTP-JSON provider: one `GET` to an HTTPS URL (plain HTTP only for loopback / private hosts), fixed auth header forms, the secret stored with DPAPI as `data/custom-<id>.key`, redirects rejected, 15 s timeout, 1 MiB cap, up to 6 windows plus balance / plan / account mapped by a dot-path subset. Definitions live in `data/custom-providers.json`.
-
-## Privacy and network behavior
-
-Application settings, caches, indexes and the background picture live in one data directory:
-
-- **Portable** (the zip, Scoop's persisted `data` folder, and `install.ps1`): `<exe>\data`.
-- **setup.exe**: `%LOCALAPPDATA%\codeusagemonit`. The installer drops `installed.txt` next to the exe and writes `HKCU\Software\codeusagemonit\InstallPath`. Either mark selects the per-user directory, so an install under Program Files stays read-only. The first launch copies an existing `<exe>\data` into that folder when it is still empty (a Scoop junction is copied and not deleted).
-- **`portable.txt`** next to the exe forces `<exe>\data` even for an installed copy. **`CODEUSAGEMONIT_DATA`** overrides the directory unless `portable.txt` is present.
-- **`--demo`**: `<exe>\verification\demo-data`, and it does not migrate the real directory.
-
-Auto proxy mode reads the Windows HTTP proxy, with HTTP/HTTPS environment fallback; global environment variables are not changed. External HTTPS validates certificates and rejects authenticated redirects. Provider login tokens remain in the owning applications. Keys saved through Settings use Windows DPAPI for the current user.
-
-## Build and verification
+## Build
 
 ```powershell
-& .\source\Windows\build.ps1
-.\codeusagemonit.exe --self-test
-.\codeusagemonit.exe --demo
-& .\source\Windows\build.ps1 -Installer
+.\source\Windows\build.ps1 -OutputDirectory .\dist             # dist\headroom.exe
+Start-Process .\dist\headroom.exe --self-test -Wait            # dist\verification\tests.json
+.\source\Windows\build.ps1 -OutputDirectory .\dist -Installer  # + setup.exe, zip, SHA256SUMS.txt
 ```
 
-Build uses the Windows-supplied .NET Framework C# 5 compiler (`/codepage:65001`) and WPF assemblies, and copies `Panel.xaml`, `pricing.json` and `icons/` next to the executables. Scripts containing Chinese text are saved as UTF-8 with BOM so Windows PowerShell 5.1 parses them. `-Installer` needs Inno Setup 6.3 or newer. The Simplified Chinese translation is `installer/ChineseSimplified.isl` in this repository, so it does not have to be copied into Inno Setup's Languages folder. The installer build also writes `codeusagemonit-setup-<version>.exe`, the portable zip and `SHA256SUMS.txt`. See `installer/README.md`.
-
-Demo mode has a separate instance and stores its settings under `verification/demo-data`; it neither reads account credentials nor modifies production preferences. `--background` starts in the tray; `--quit` exits the production instance; `--quit --demo` exits the preview.
-
-See `THIRD-PARTY-NOTICES.md` and `licenses/` for attribution. This is an independent application, not an official release of CodexBar or ccusage.
+`build.ps1` must stay UTF-8 with BOM (Windows PowerShell 5.1 reads Chinese text otherwise as ANSI). The release version is the literal `AssemblyVersion("x.y.z.w")` in `App.cs`. `-Installer` needs Inno Setup 6.3 or newer; see `installer/README.md`.

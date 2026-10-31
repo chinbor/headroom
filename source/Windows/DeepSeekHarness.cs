@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // DeepSeek Harness (dsh, @deepseek-ai/dsh-*): each session appends zstd frames of JSON
     // lines to ~/.dsh/sessions/<workspace>/<session>/session.v4.jsonl.zstd. A model call is
     // a "request/header" (send time, model) followed by an "assistant/message" (usage, time

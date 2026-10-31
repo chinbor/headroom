@@ -8,7 +8,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Documents;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Interface language. The Chinese text in the code is the key and English comes from
     // I18nTable (gettext-style). Text the code builds from pieces ("近 " + n + " 天") is
     // translated piece by piece: every table key of two or more characters found in it is

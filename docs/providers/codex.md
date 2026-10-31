@@ -1,8 +1,8 @@
 # Codex
 
-[← 返回项目](../../README.md) · [下载](https://github.com/fanchengliu/codeusagemonit/releases)
+[← 返回项目](../../README.md) · [下载](https://github.com/chinbor/headroom/releases)
 
-> 适用于 codeusagemonit 1.0.0。连接方式：**OAuth**。
+> 适用于 余量 Headroom 2.1.0。连接方式：**OAuth**。
 
 ## 数据来源
 
@@ -11,7 +11,7 @@
 ## 连接步骤
 
 1. 在 Codex 应用中登录，或运行 `codex login`。
-2. 打开 codeusagemonit 的 Codex 卡片，点击刷新。未连接时可点击「在终端登录」，完成后点击「我已登录，刷新」。
+2. 打开 余量 Headroom 的 Codex 卡片，点击刷新。未连接时可点击「在终端登录」，完成后点击「我已登录，刷新」。
 3. 需要本机用量时，在 Codex 中产生会话记录；程序读取 `sessions` 和 `archived_sessions`。
 
 ## 可以查看什么

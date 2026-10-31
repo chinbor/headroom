@@ -9,16 +9,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // Runs a platform's official CLI out of sight so that the CLI itself keeps its sign-in fresh
-    // (Claude Code, Grok, Antigravity's agy): this program never refreshes or rewrites another
+    // (Claude Code): this program never refreshes or rewrites another
     // client's tokens. Each run is hidden, time-limited and placed in a Windows job, so the CLI
     // and anything it starts end with it; runs for one platform never overlap.
     public static class BackgroundCli {
-        public sealed class Result { public int ExitCode = -1; public string Output = ""; public bool TimedOut; }
         private static readonly Dictionary<string, SemaphoreSlim> gates = new Dictionary<string, SemaphoreSlim>(StringComparer.Ordinal);
         private static SemaphoreSlim Gate(string platform) { lock (gates) { SemaphoreSlim g; if (!gates.TryGetValue(platform, out g)) gates[platform] = g = new SemaphoreSlim(1, 1); return g; } }
-        private const int MaxOutput = 1 << 20;
 
         // An executable on PATH (with PATHEXT), e.g. "claude" → C:\…\claude.cmd. Null when absent.
         public static string Find(string name) {
@@ -38,40 +36,6 @@ namespace CodeUsageMonit {
                           : new ProcessStartInfo(executable, arguments);
         }
 
-        // Runs to completion (or the timeout) with output captured: `grok models`, `agy -p /usage`.
-        // The working directory is a fresh empty folder; standard input is closed.
-        public static async Task<Result> Run(string platform, string executable, string arguments, int timeoutSeconds, IDictionary<string, string> environment) {
-            SemaphoreSlim gate = Gate(platform);
-            await gate.WaitAsync().ConfigureAwait(false);
-            string scratch = Path.Combine(Path.GetTempPath(), "codeusagemonit-cli-" + Guid.NewGuid().ToString("N"));
-            try {
-                Directory.CreateDirectory(scratch);
-                return await Task.Run(() => {
-                    ProcessStartInfo info = Info(executable, arguments);
-                    info.UseShellExecute = false; info.CreateNoWindow = true; info.WindowStyle = ProcessWindowStyle.Hidden; info.WorkingDirectory = scratch;
-                    info.RedirectStandardInput = true; info.RedirectStandardOutput = true; info.RedirectStandardError = true;
-                    info.StandardOutputEncoding = Encoding.UTF8; info.StandardErrorEncoding = Encoding.UTF8;
-                    // Set for this child only, never in our own environment.
-                    if (environment != null) foreach (var item in environment) info.EnvironmentVariables[item.Key] = item.Value;
-                    var result = new Result(); var output = new StringBuilder();
-                    using (var job = new Job())
-                    using (var process = new Process { StartInfo = info }) {
-                        DataReceivedEventHandler collect = (s, e) => { if (e.Data == null) return; lock (output) { if (output.Length < MaxOutput) output.AppendLine(e.Data); } };
-                        process.OutputDataReceived += collect; process.ErrorDataReceived += collect;
-                        process.Start(); job.Add(process);
-                        try { process.StandardInput.Close(); } catch { }
-                        process.BeginOutputReadLine(); process.BeginErrorReadLine();
-                        if (!process.WaitForExit(timeoutSeconds * 1000)) { result.TimedOut = true; job.Dispose(); try { process.Kill(); } catch { } }
-                        else { process.WaitForExit(); result.ExitCode = process.ExitCode; }
-                    }
-                    lock (output) result.Output = output.ToString();
-                    return result;
-                }).ConfigureAwait(false);
-            } finally {
-                gate.Release();
-                try { Directory.Delete(scratch, true); } catch { }
-            }
-        }
         // Starts an interactive CLI in a hidden console (some CLIs refresh their sign-in only
         // when started interactively) and ends it as soon as done() is true or the timeout passes.
         // Nothing is typed into it. Returns whether done() became true.

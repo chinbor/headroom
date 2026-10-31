@@ -9,7 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     public sealed partial class MonitorPanel {
         private StackPanel subscriptionRows;
         // Turned off in this session: still listed so the switch can turn them back on.
@@ -117,7 +117,7 @@ namespace CodeUsageMonit {
         private bool showAdvanced;
         private void RenderAddArea() {
             if (addArea == null) return; addArea.Children.Clear(); addArea.Margin = new Thickness(0, 10, 0, 2);
-            var offered = ProviderCatalog.Ids.Concat(ProviderCatalog.Custom.Values.Where(p => p.Builtin).Select(p => p.Id)).Where(id => !ProviderCatalog.LocalOnly(id) && !config.Enabled.Contains(id) && !switchedOff.Contains(id)).Distinct().ToList();
+            var offered = ProviderCatalog.Ids.Concat(ProviderCatalog.Custom.Values.Where(p => p.Builtin).Select(p => p.Id)).Where(id => !config.Enabled.Contains(id) && !switchedOff.Contains(id)).Distinct().ToList();
             if (offered.Count > 0) {
                 addArea.Children.Add(new TextBlock { Text = "添加订阅", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Theme.Ink, Margin = new Thickness(0, 4, 0, 8) });
                 var tiles = new WrapPanel(); foreach (string id in offered) tiles.Children.Add(AddTile(id)); addArea.Children.Add(tiles);
@@ -133,13 +133,13 @@ namespace CodeUsageMonit {
         }
         private FrameworkElement AddTile(string id) {
             CustomProvider recipe; ProviderCatalog.Custom.TryGetValue(id, out recipe);
-            bool console = recipe != null && recipe.ConsoleToken, keyed = !console && ProviderCatalog.KeyEnv(id, config).Length > 0;
+            bool console = recipe != null && recipe.ConsoleToken;
             var body = new StackPanel();
             var top = new StackPanel { Orientation = Orientation.Horizontal };
             var logo = Icon(id, 18); logo.Margin = new Thickness(0, 0, 8, 0); logo.VerticalAlignment = VerticalAlignment.Center; top.Children.Add(logo);
             top.Children.Add(new TextBlock { Text = ProviderCatalog.Name(id), FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Theme.Ink, VerticalAlignment = VerticalAlignment.Center });
             body.Children.Add(top);
-            body.Children.Add(new TextBlock { Text = console ? "在网页登录，自动读取" : keyed ? "需要填写 API 密钥" : "读取本机客户端的登录", FontSize = 11, Foreground = Theme.Dim, Margin = new Thickness(0, 4, 0, 8), TextTrimming = TextTrimming.CharacterEllipsis });
+            body.Children.Add(new TextBlock { Text = console ? "在网页登录，自动读取" : "读取本机客户端的登录", FontSize = 11, Foreground = Theme.Dim, Margin = new Thickness(0, 4, 0, 8), TextTrimming = TextTrimming.CharacterEllipsis });
             var buttons = new StackPanel { Orientation = Orientation.Horizontal };
             buttons.Children.Add(console ? Primary("登录添加", () => AddPlatform(id)) : Ghost("添加", () => AddPlatform(id)));
             if (id == "deepseek") { var key = Link("用 API Key", DeepSeekApiKey); key.ToolTip = "只看余额：粘贴 DeepSeek 的 API Key，读官方余额接口，没有每日用量。"; buttons.Children.Add(key); }
@@ -150,7 +150,6 @@ namespace CodeUsageMonit {
             config.Enabled = config.Enabled.Concat(new[] { id }).Distinct().ToArray(); switchedOff.Remove(id); PersistSubscriptions();
             CustomProvider recipe;
             if (ProviderCatalog.Custom.TryGetValue(id, out recipe) && recipe.ConsoleToken && !Store.HasSavedKey(id)) OpenConsoleLogin(id);
-            else if (ProviderCatalog.KeyEnv(id, config).Length > 0 && String.IsNullOrEmpty(Store.ProviderKey(id, config))) EditSubscription(id, null);
             else { var ignored = RefreshOne(id); }
         }
         // DeepSeek without the console sign-in: an API key and the official balance endpoint.
@@ -244,7 +243,7 @@ namespace CodeUsageMonit {
                 root.Children.Add(Hint("接入方案是一段 JSON：读额度的地址和字段路径、可选的每日用量接口、token 怎么获取（设置引导按它生成）。字段说明和 DeepSeek、Agnes 两个内置方案见 docs/platform-recipes.md。token 不要写进 JSON。"));
                 json = new TextBox { Text = existing != null ? existing.Source : template, Height = 300, AcceptsReturn = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontFamily = new FontFamily("Consolas"), FontSize = 12, Margin = new Thickness(0, 10, 0, 10) }; root.Children.Add(json);
             } else root.Children.Add(Hint(ProviderCatalog.Help(id)));
-            bool supportsKey = isCustom || existing != null || ProviderCatalog.KeyEnv(id, config).Length > 0;
+            bool supportsKey = isCustom || existing != null;
             if (supportsKey) {
                 root.Children.Add(Label(existing != null && existing.ConsoleToken ? "token（也可以保存后点“登录”自动获取）" : "密钥"));
                 var keyBox = new PasswordBox(); keyBox.Name = "key"; root.Children.Add(keyBox);
@@ -275,7 +274,7 @@ namespace CodeUsageMonit {
             if (id != null && supportsKey) {
                 buttons.Children.Add(Ghost("清除已保存密钥", () => {
                     if (MessageBox.Show("确认清除此平台在本程序保存的密钥？", "清除凭据", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-                    Store.SetProviderKey(id, ""); result.Text = "已清除；环境变量不受影响。";
+                    Store.SetProviderKey(id, ""); result.Text = "已清除。";
                 }));
                 if (existing != null && !existing.Builtin) buttons.Children.Add(Ghost("删除接入方案", () => {
                     if (MessageBox.Show("确认删除此自定义订阅及本程序保存的密钥？", "删除订阅", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
@@ -283,13 +282,7 @@ namespace CodeUsageMonit {
                 }));
             }
             root.Children.Add(buttons);
-            if (id == "copilot") {
-                var code = new TextBox { IsReadOnly = true, FontSize = 20, FontFamily = new FontFamily("Consolas"), Margin = new Thickness(0, 10, 0, 4), Visibility = Visibility.Collapsed };
-                var login = Primary("使用 GitHub 登录", null); login.IsEnabled = !demo; login.Margin = new Thickness(0, 14, 0, 0);
-                login.Click += async delegate { login.IsEnabled = false; await CopilotLogin(code, result); login.IsEnabled = !demo; };
-                root.Children.Add(login); root.Children.Add(code);
-                root.Children.Add(Hint("OAuth 设备码登录，只申请 read:user 权限，用于读取 Copilot 额度。"));
-            } else if (!isCustom && !supportsKey) root.Children.Add(Hint("按上方说明使用平台客户端登录后刷新。"));
+            if (!isCustom && !supportsKey) root.Children.Add(Hint("按上方说明使用平台客户端登录后刷新。"));
             editor = OwnedWindow("订阅设置", root, 540); editor.Show();
         }
 
@@ -339,30 +332,6 @@ namespace CodeUsageMonit {
         private static Button Link(string text, Action click) { var b = QuotaDashboard.Quiet(text, text, click ?? delegate { }, Theme.Accent); b.Height = 30; b.Padding = new Thickness(10, 0, 10, 0); b.Margin = new Thickness(0, 0, 4, 0); return b; }
         private static Button Primary(string text, Action click) { var b = Ghost(text, click); b.Background = Theme.Accent; b.Foreground = Theme.AccentInk; return b; }
         private static Button Tiny(string text, string name, Action click) { var b = QuotaDashboard.Button(text, name, click); b.Height = 15; b.MinWidth = 18; b.FontSize = 7; b.Padding = new Thickness(0); b.Margin = new Thickness(0, 1, 0, 1); b.Background = Brushes.Transparent; b.Foreground = Theme.Dim; return b; }
-        // GitHub OAuth device flow: show the code, open the browser, poll until authorized.
-        private async Task CopilotLogin(TextBox code, TextBlock note) {
-            try {
-                using (var service = new ProviderService(config)) {
-                    note.Text = "正在向 GitHub 申请设备码…";
-                    var pending = await service.StartCopilotLogin();
-                    code.Text = pending.UserCode; code.Visibility = Visibility.Visible;
-                    try { Clipboard.SetText(pending.UserCode); } catch { }
-                    try { Process.Start(new ProcessStartInfo(pending.VerificationUri) { UseShellExecute = true }); } catch { }
-                    note.Text = "代码已复制，在打开的 GitHub 页面输入并授权，完成后自动连接。";
-                    DateTime until = DateTime.UtcNow.AddSeconds(pending.ExpiresIn);
-                    while (DateTime.UtcNow < until) {
-                        await Task.Delay(TimeSpan.FromSeconds(Math.Max(5, pending.Interval)));
-                        string token = await service.PollCopilotLogin(pending);
-                        if (token == null) continue;
-                        Store.SetProviderKey("copilot", token);
-                        if (!config.Enabled.Contains("copilot")) config.Enabled = config.Enabled.Concat(new[] { "copilot" }).ToArray();
-                        PersistSubscriptions(); note.Text = "已连接 GitHub Copilot。"; code.Visibility = Visibility.Collapsed;
-                        await RefreshOne("copilot"); return;
-                    }
-                    note.Text = "设备码已过期，请重新登录。"; code.Visibility = Visibility.Collapsed;
-                }
-            } catch (Exception e) { note.Text = e is ProviderException ? e.Message : "无法连接 GitHub，请检查网络或代理设置。"; }
-        }
         private Window OwnedWindow(string title, FrameworkElement root, double width) {
             var window = ThemedWindow(title, root, width);
             if (quotaDashboard.IsOpen) { window.Owner = quotaDashboard.View; window.WindowStartupLocation = WindowStartupLocation.CenterOwner; }

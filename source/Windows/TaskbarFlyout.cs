@@ -9,7 +9,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // The card shown while the pointer rests on the taskbar summary: the overview sentence and
     // every platform's windows at a glance. It never takes focus or clicks; clicking the
     // summary still opens the detail window.

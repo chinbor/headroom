@@ -1,7 +1,9 @@
-# Used by codeusagemonit setup.exe (Inno Setup). ASCII on purpose so Windows PowerShell 5.1
-# can run it without a BOM. Actions: stop | add-path | remove-path | is-link.
+# Used by Headroom setup.exe (Inno Setup). ASCII on purpose so Windows PowerShell 5.1
+# can run it without a BOM. Actions: stop | remove-path | is-link.
+# remove-path drops the install folder from the user PATH, which versions with a command-line
+# tool added; nothing adds it any more.
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('stop', 'add-path', 'remove-path', 'is-link')][string]$Action,
+    [Parameter(Mandatory = $true)][ValidateSet('stop', 'remove-path', 'is-link')][string]$Action,
     [Parameter(Mandatory = $true)][string]$Directory,
     [string]$Target = ''
 )
@@ -29,14 +31,14 @@ function Process-Path($Process) {
 }
 
 function Broadcast-Environment {
-    if (-not ('CodeUsageMonitSetup.EnvBroadcast' -as [type])) {
-        Add-Type -Namespace CodeUsageMonitSetup -Name EnvBroadcast -MemberDefinition @'
+    if (-not ('HeadroomSetup.EnvBroadcast' -as [type])) {
+        Add-Type -Namespace HeadroomSetup -Name EnvBroadcast -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true, CharSet=System.Runtime.InteropServices.CharSet.Auto)]
 public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, int Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);
 '@
     }
     $result = [UIntPtr]::Zero
-    [CodeUsageMonitSetup.EnvBroadcast]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result) | Out-Null
+    [HeadroomSetup.EnvBroadcast]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result) | Out-Null
 }
 
 function Get-UserPathState {
@@ -71,18 +73,22 @@ if ($Action -eq 'is-link') {
 
 if ($Action -eq 'stop') {
     $prefix = $dir + '\'
+    # codeusagemonit is the exe name of versions up to 2.0.1.
+    $names = @('headroom', 'codeusagemonit')
     function Running-Here {
-        @(Get-Process -Name 'codeusagemonit', 'codeusage' -ErrorAction SilentlyContinue |
+        @(Get-Process -Name $names -ErrorAction SilentlyContinue |
             Where-Object { $p = Process-Path $_; $p -and $p.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })
     }
-    $running = @(Running-Here | Where-Object { $_.ProcessName -eq 'codeusagemonit' })
-    $exe = $prefix + 'codeusagemonit.exe'
-    if ($running.Count -gt 0 -and (Test-Path -LiteralPath $exe)) {
-        # --quit signals the running instance and returns. Do not -Wait: a GUI-subsystem
-        # exe that failed to exit would stall the installer.
-        try { Start-Process -FilePath $exe -ArgumentList '--quit' -WindowStyle Hidden } catch { }
-        Start-Sleep -Milliseconds 800
+    $asked = $false
+    foreach ($name in $names) {
+        $exe = $prefix + $name + '.exe'
+        if (@(Running-Here | Where-Object { $_.ProcessName -eq $name }).Count -gt 0 -and (Test-Path -LiteralPath $exe)) {
+            # --quit signals the running instance and returns. Do not -Wait: a GUI-subsystem
+            # exe that failed to exit would stall the installer.
+            try { Start-Process -FilePath $exe -ArgumentList '--quit' -WindowStyle Hidden; $asked = $true } catch { }
+        }
     }
+    if ($asked) { Start-Sleep -Milliseconds 800 }
     $left = @(Running-Here)
     if ($left.Count -gt 0) {
         $left | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -106,19 +112,12 @@ try {
         $norm = Normalize-Dir $part
         if (($norm.Length -gt 0) -and ($norm -ieq $normTarget)) {
             $found = $true
-            if ($Action -eq 'remove-path') { continue }
+            continue
         }
         [void]$kept.Add($part)
     }
-    if ($Action -eq 'add-path') {
-        if ($found) { exit 0 }
-        if ([string]::IsNullOrWhiteSpace($raw)) { $updated = $target }
-        elseif ($raw.EndsWith(';')) { $updated = $raw + $target + ';' }
-        else { $updated = $raw + ';' + $target }
-    } else {
-        if (-not $found) { exit 0 }
-        $updated = [System.String]::Join(';', $kept.ToArray())
-    }
+    if (-not $found) { exit 0 }
+    $updated = [System.String]::Join(';', $kept.ToArray())
     $state.Key.SetValue('Path', $updated, $state.Kind)
 } finally {
     $state.Key.Close()

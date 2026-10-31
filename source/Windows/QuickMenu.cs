@@ -8,7 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using Forms = System.Windows.Forms;
 
-namespace CodeUsageMonit {
+namespace Headroom {
     // The right-click panel of the taskbar summary and the tray icon, in the app's own theme:
     // a status header, one line per subscription and the actions, each with what it does.
     // Like a system menu it never takes the focus, so the tray's overflow flyout it was opened

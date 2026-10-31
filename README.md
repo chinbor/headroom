@@ -31,10 +31,12 @@ Claude、Codex、DeepSeek、Agnes 还剩多少、什么时候重置、照现在�
 
 | 平台 | 怎么接入 | 显示的内容 |
 | --- | --- | --- |
-| Claude | 复用 Claude Code 的登录 | 5 小时、每周额度；本机日志里的 token 和费用 |
-| Codex | 复用 Codex 应用或 CLI 的登录 | 5 小时、每周额度；本机日志里的 token 和费用 |
-| DeepSeek | 设置里点“登录”，在网页里登录；也可以只填 API Key（只读余额） | 余额、每天每个模型的 token、实际扣费 |
-| Agnes | 设置里点“登录”，在网页里登录 | 文本 5 小时、每周额度，图像和视频每日额度，每天的 token |
+| [Claude](docs/providers/claude.md) | 复用 Claude Code 的登录 | 5 小时、每周额度；本机日志里的 token 和费用 |
+| [Codex](docs/providers/codex.md) | 复用 Codex 应用或 CLI 的登录 | 5 小时、每周额度；本机日志里的 token 和费用 |
+| [DeepSeek](docs/providers/deepseek.md) | 设置里点“登录”，在网页里登录；也可以只填 API Key（只读余额） | 余额、每天每个模型的 token、实际扣费 |
+| [Agnes](docs/providers/agnes.md) | 设置里点“登录”，在网页里登录 | 文本 5 小时、每周额度，图像和视频每日额度，每天的 token |
+
+点平台名看详细说明；想接入别的平台见[自定义平台](docs/providers/custom.md)。
 
 ## 下载安装
 
@@ -42,8 +44,8 @@ Claude、Codex、DeepSeek、Agnes 还剩多少、什么时候重置、照现在�
 
 从 [Releases](https://github.com/chinbor/headroom/releases/latest) 下载：
 
-- `codeusagemonit-setup-<版本>.exe`：安装程序，不需要管理员权限，默认装到 `%LOCALAPPDATA%\Programs\codeusagemonit`，可选开机启动。
-- `codeusagemonit-<版本>-win-x64.zip`：免安装，解压到任意可写的文件夹，双击 `codeusagemonit.exe`。
+- `headroom-setup-<版本>.exe`：安装程序，不需要管理员权限，默认装到 `%LOCALAPPDATA%\Programs\余量 Headroom`，可选开机启动。
+- `headroom-<版本>-win-x64.zip`：免安装，解压到任意可写的文件夹，双击 `headroom.exe`。
 
 也可以用 PowerShell 一行安装（再运行一次即升级）：
 
@@ -54,23 +56,23 @@ irm https://raw.githubusercontent.com/chinbor/headroom/main/install.ps1 | iex
 > [!NOTE]
 > 程序没有代码签名。首次运行如果提示“Windows 已保护你的电脑”，点 **更多信息 → 仍要运行**；可以用发布页的 `SHA256SUMS.txt` 核对文件。
 
-程序文件、数据目录和安装路径沿用原项目名 `codeusagemonit`。
+从 2.0.1 及更早版本（程序名还是 `codeusagemonit.exe`）升级：直接运行新的安装包，会原地替换；第一次启动时自动把数据从 `%LOCALAPPDATA%\codeusagemonit` 搬到 `%LOCALAPPDATA%\Headroom`，开机启动设置也会保留。
 
 ## 上手
 
 1. 启动后，任务栏托盘左边会出现摘要，托盘区也有图标。单击摘要或托盘图标打开“额度与消耗”窗口。
 2. Claude、Codex 在各自的客户端里登录过就能直接读到。
 3. DeepSeek、Agnes：打开 设置 →“添加订阅”，点“登录添加”，在弹出的页面里登录即可。
-4. 想先看效果，运行 `codeusagemonit.exe --demo`：使用演示数据，不读取账户、不联网，也不改动正式设置。
+4. 想先看效果，运行 `headroom.exe --demo`：使用演示数据，不读取账户、不联网，也不改动正式设置。
 
 更多说明见 [使用说明](./使用说明.md)。
 
 ## 数据与隐私
 
-- 设置和缓存在 `%LOCALAPPDATA%\codeusagemonit`（安装版）或程序旁边的 `data\`（免安装版）。
+- 设置和缓存在 `%LOCALAPPDATA%\Headroom`（安装版）或程序旁边的 `data\`（免安装版）。
 - 网页登录读到的 token 用 Windows DPAPI 加密保存，只有当前 Windows 用户能解密；只发给接入方案里写明的地址。
 - 只统计 token 数、请求数、耗时和模型名，不保存对话内容；没有遥测，没有自建服务器。
-- 每天从原项目仓库下载一次公开的模型价目表 `pricing.json`，可在设置里关闭。
+- 每天从本项目仓库下载一次公开的模型价目表 `pricing.json`，可在设置里关闭。
 
 DeepSeek、Agnes 用的是网页控制台的内部接口，没有公开文档，平台改版后可能需要更新接入方案。
 
@@ -81,8 +83,8 @@ DeepSeek、Agnes 用的是网页控制台的内部接口，没有公开文档，
 ```powershell
 git clone https://github.com/chinbor/headroom.git
 cd headroom
-.\source\Windows\build.ps1 -OutputDirectory .\dist        # 生成 dist\codeusagemonit.exe
-Start-Process .\dist\codeusagemonit.exe --self-test -Wait  # 自测，结果在 dist\verification\tests.json
+.\source\Windows\build.ps1 -OutputDirectory .\dist        # 生成 dist\headroom.exe
+Start-Process .\dist\headroom.exe --self-test -Wait  # 自测，结果在 dist\verification\tests.json
 .\source\Windows\build.ps1 -OutputDirectory .\dist -Installer  # 另外生成安装包和免安装 zip
 ```
 
@@ -92,7 +94,7 @@ Start-Process .\dist\codeusagemonit.exe --self-test -Wait  # 自测，结果在 
 
 ## 致谢
 
-- [codeusagemonit](https://github.com/fanchengliu/codeusagemonit)：本项目从它 Fork 而来，保留了它的本机日志统计、计价和各平台额度读取逻辑。
+- [codeusagemonit](https://github.com/fanchengliu/codeusagemonit)：本项目从它 Fork 而来，保留了它的本机日志统计、计价和 Claude、Codex 额度读取逻辑。
 - [usage-dash](https://github.com/chinbor/usage-dash)：Agnes 接口流程和图标参考（MIT）。
 - [CodexBar](https://github.com/steipete/CodexBar)、[ccusage](https://github.com/ccusage/ccusage)、[LiteLLM](https://github.com/BerriAI/litellm)、[models.dev](https://github.com/anomalyco/models.dev)、[Microsoft Edge WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)、[Inno Setup](https://jrsoftware.org/isinfo.php)。
 
