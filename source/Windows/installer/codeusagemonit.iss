@@ -31,9 +31,9 @@
   #define RepoRoot "..\..\.."
 #endif
 
-#define MyAppName "codeusagemonit"
+#define MyAppName "余量 Headroom"
 #define MyAppPublisher "codeusagemonit"
-#define MyAppURL "https://github.com/fanchengliu/codeusagemonit"
+#define MyAppURL "https://github.com/chinbor/headroom"
 
 [Setup]
 AppId={{A4E8C1D7-6F2B-4C9A-8E15-3B7D9F0A2C64}
@@ -44,11 +44,11 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-AppComments=Windows tray monitor for AI coding tool quotas and usage
+AppComments=Windows taskbar widget for AI subscription quotas
 VersionInfoVersion={#MyAppVersion}.0
 VersionInfoProductVersion={#MyAppVersion}.0
 VersionInfoProductName={#MyAppName}
-VersionInfoDescription=codeusagemonit setup
+VersionInfoDescription=Headroom setup
 VersionInfoCopyright=Copyright (C) 2026 codeusagemonit contributors
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
@@ -85,21 +85,20 @@ chinesesimp.Options=其他选项：
 english.Options=Other options:
 chinesesimp.AutoStart=登录 Windows 后自动启动（只驻留托盘）
 english.AutoStart=Start with Windows (tray only)
-chinesesimp.AddPath=将 codeusage 加入当前用户的 PATH（新开的终端可直接运行）
-english.AddPath=Add codeusage to your user PATH (new terminals can run it)
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "autostart"; Description: "{cm:AutoStart}"; GroupDescription: "{cm:Options}"; Flags: unchecked
-Name: "addpath"; Description: "{cm:AddPath}"; GroupDescription: "{cm:Options}"; Flags: checkedonce
 
 [Files]
 Source: "{#BuildDir}\codeusagemonit.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\codeusage.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\app.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\Panel.xaml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\Microsoft.Web.WebView2.Core.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\Microsoft.Web.WebView2.Wpf.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\WebView2Loader.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\pricing.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\icons\*"; DestDir: "{app}\icons"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#BuildDir}\platforms\*"; DestDir: "{app}\platforms"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#RepoRoot}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoRoot}\使用说明.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoRoot}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -156,8 +155,8 @@ begin
   Result := '';
   ExtractTemporaryFile('setup-helper.ps1');
   if RunHelper('stop', ExpandConstant('{tmp}\setup-helper.ps1')) <> 0 then
-    Result := 'codeusagemonit is still running from this folder. Quit it from the tray icon and run setup again.' + #13#10 +
-      '这个文件夹里的 codeusagemonit 仍在运行。请在托盘图标上右键退出，然后重新安装。';
+    Result := 'Headroom is still running from this folder. Quit it from the tray icon and run setup again.' + #13#10 +
+      '这个文件夹里的 余量 Headroom 仍在运行。请在托盘图标上右键退出，然后重新安装。';
 end;
 
 { Setup run by the app's updater (/restart=1, silent). /sidebyside=1 keeps a side-by-side copy so. }
@@ -186,15 +185,6 @@ begin
   except
     { The app folder is not known when setup stops before it is set: nothing to start then. }
   end;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep <> ssPostInstall then Exit;
-  if not WizardIsTaskSelected('addpath') then Exit;
-  if (RunHelper('add-path', ExpandConstant('{app}\setup-helper.ps1')) <> 0) and (not WizardSilent) then
-    MsgBox('Could not add codeusage to your user PATH. You can add the install folder yourself.' + #13#10 +
-      '未能把 codeusage 加入用户 PATH，可以稍后把安装目录手动加进去。', mbInformation, MB_OK);
 end;
 
 function InitializeUninstall: Boolean;

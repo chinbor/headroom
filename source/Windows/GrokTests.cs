@@ -36,27 +36,6 @@ namespace CodeUsageMonit {
                 var restored = J.Serializer().Deserialize<ProviderState>(J.Serializer().Serialize(rounded));
                 Check(restored.ProductUsage.Count == 2 && restored.ProductUsage[0].UsedPercent == 55 && restored.Quotas.Count == 1);
             });
-            test("Grok CLI text and JSON keep consumption off the remaining-quota list", () => {
-                var state = Parsers.Grok(J.Parse("{\"config\":{\"creditUsagePercent\":63,\"productUsage\":[{\"product\":\"build\",\"usagePercent\":55},{\"product\":\"chat\",\"usagePercent\":8}]}}"));
-                Parsers.Normalize(state);
-                string build = CliProgram.ProductLine(state.ProductUsage[0]);
-                string chat = CliProgram.ProductLine(state.ProductUsage[1]);
-                Check(build == "Build · 已消耗总额度 55%（共用当前账期额度）" && chat == "Chat · 已消耗总额度 8%（共用当前账期额度）");
-                Check(build.IndexOf("剩余", StringComparison.Ordinal) < 0 && chat.IndexOf("剩余", StringComparison.Ordinal) < 0);
-                string json = J.Serializer().Serialize(new {
-                    windows = state.Quotas.Select(q => new { label = q.Label, remainingPercent = Math.Round(q.Remaining, 2) }),
-                    productUsage = CliProgram.ProductJson(state)
-                });
-                Check(json.Contains("\"label\":\"当前账期\"") && json.Contains("\"remainingPercent\":37") && json.Contains("\"product\":\"build\"") && json.Contains("\"usedPercent\":55") && json.Contains("\"product\":\"chat\"") && json.Contains("\"usedPercent\":8"));
-                Check(json.IndexOf("Build 占比", StringComparison.Ordinal) < 0 && json.IndexOf("45", StringComparison.Ordinal) < 0);
-                var legacy = J.Serializer().Deserialize<ProviderState>("{\"Id\":\"grok\",\"ProductUsage\":null,\"Quotas\":[{\"Label\":\"当前账期\",\"Used\":63},{\"Label\":\"Build 占比\",\"Used\":55}]}");
-                Parsers.Normalize(legacy);
-                string legacyJson = J.Serializer().Serialize(new {
-                    windows = legacy.Quotas.Select(q => new { label = q.Label, remainingPercent = Math.Round(q.Remaining, 2) }),
-                    productUsage = CliProgram.ProductJson(legacy)
-                });
-                Check(legacy.Quotas.Count == 1 && legacyJson.Contains("\"remainingPercent\":37") && legacyJson.Contains("\"productUsage\":[]") && legacyJson.IndexOf("Build 占比", StringComparison.Ordinal) < 0);
-            });
             test("A failed Grok refresh keeps the shared quota and the consumption breakdown", () => {
                 var old = Parsers.Grok(J.Parse("{\"config\":{\"creditUsagePercent\":63,\"productUsage\":[{\"product\":\"build\",\"usagePercent\":55},{\"product\":\"chat\",\"usagePercent\":8}]}}"));
                 old.Status = "ready"; old.LastSuccess = "2026-09-30T00:00:00Z";

@@ -7,6 +7,17 @@ using System.Security.Cryptography;
 using System.Text;
 
 namespace CodeUsageMonit {
+    // Bar data for the per-period usage reports (one bar per hour or day, parts per source).
+    public sealed class ChartBar {
+        public DateTime Start; public bool Hourly, Current;
+        public double Cost, Tokens, Requests, TimedOutput, TimedSeconds; public bool CostPartial;
+        public List<ChartPart> Parts = new List<ChartPart>();
+        public double? Speed { get { return OutputTiming.Speed(TimedOutput, TimedSeconds); } }
+    }
+    public sealed class ChartPart {
+        public string Name = "", Color = "#FFFFFF"; public double Cost, Tokens, TimedOutput, TimedSeconds;
+        public double? Speed { get { return OutputTiming.Speed(TimedOutput, TimedSeconds); } }
+    }
     // Which endpoint a client (Claude Code / Codex) was configured for, from a point in
     // time on. Keys are never stored: only a 6-hex SHA-256 fingerprint that tells two
     // accounts on the same host apart.

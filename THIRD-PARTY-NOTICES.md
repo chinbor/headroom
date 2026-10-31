@@ -16,9 +16,19 @@ codeusagemonit is an independent Windows application. It is not an official rele
 
 Prices are the vendors' published list prices as recorded by these catalogs. The estimates are not bills.
 
+## Bundled libraries
+
+### Microsoft Edge WebView2 SDK 1.0.2903.40
+
+`Microsoft.Web.WebView2.Core.dll`, `Microsoft.Web.WebView2.Wpf.dll` and `WebView2Loader.dll` from the
+[Microsoft.Web.WebView2](https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.2903.40) NuGet package,
+redistributed unmodified to show the sign-in window for platforms read with a web console token.
+Copyright (C) Microsoft Corporation. License: `source/Windows/lib/webview2/LICENSE.txt` (BSD-style).
+The WebView2 runtime itself is part of Windows 11 and is not shipped.
+
 ## Provider logos
 
-The files in `icons/` are the logos of the monitored products, used unmodified only to identify each provider. They are taken from CodexBar (`Sources/CodexBar/Resources/ProviderIcon-<id>.svg`, MIT, Copyright (c) 2026 Peter Steinberger, license text in `licenses/CodexBar-MIT.txt`; `zcode.svg` is `ProviderIcon-zai.svg`). The logos and product names are trademarks of their respective owners; their use does not imply endorsement.
+The files in `icons/` are the logos of the monitored products, used unmodified only to identify each provider. They are taken from CodexBar (`Sources/CodexBar/Resources/ProviderIcon-<id>.svg`, MIT, Copyright (c) 2026 Peter Steinberger, license text in `licenses/CodexBar-MIT.txt`; `zcode.svg` is `ProviderIcon-zai.svg`). `agnes.svg` is the Agnes AI mark from lobe-icons (https://github.com/lobehub/lobe-icons, MIT), taken from usage-dash (`hooks/catalog.ts`) without its enclosing disc. The logos and product names are trademarks of their respective owners; their use does not imply endorsement.
 
 ## Installer translation
 
@@ -30,6 +40,10 @@ The files in `icons/` are the logos of the monitored products, used unmodified o
 - License: Inno Setup License. Copyright (C) 1997-2026 Jordan Russell. Portions Copyright (C) 2000-2026 Martijn Laan. Full text: `licenses/InnoSetup.txt`.
 
 ## Projects studied as references (no code included)
+
+### usage-dash
+- https://github.com/chinbor/usage-dash — MIT, Copyright (c) 2026 chinbor. License text: `licenses/usage-dash-MIT.txt`.
+- Studied `hooks/providers.ts` and `hooks/lib.ts` for the Agnes platform login, subscription endpoint and four quota-window fields. Independently implemented in C# in `AgnesPlan.cs`; no plugin configuration, tokens or runtime are bundled.
 
 ### CodexBar
 - https://github.com/steipete/CodexBar — MIT, Copyright (c) 2026 Peter Steinberger. License text kept in `licenses/CodexBar-MIT.txt`.

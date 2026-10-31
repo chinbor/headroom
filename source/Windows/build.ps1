@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$OutputDirectory = (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent),
   [switch]$Installer
 )
@@ -21,14 +21,17 @@ function New-IconBitmap([int]$s) {
   $path.AddArc(0, 0, $d, $d, 180, 90); $path.AddArc($e - $d, 0, $d, $d, 270, 90); $path.AddArc($e - $d, $e - $d, $d, $d, 0, 90); $path.AddArc(0, $e - $d, $d, $d, 90, 90); $path.CloseFigure()
   $background = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 30, 33, 39))
   $g.FillPath($background, $path); $background.Dispose(); $path.Dispose()
-  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::None
-  $w = [Math]::Max(2, [Math]::Round($s * 0.15)); $gap = [Math]::Max(1, [Math]::Round($s * 0.07))
-  $x = [Math]::Floor(($s - (3 * $w + 2 * $gap)) / 2); $base = [Math]::Round($s * 0.79)
-  foreach ($bar in @(@(0.30, 109, 224, 214), @(0.56, 150, 217, 238), @(0.42, 214, 193, 249))) {
-    $h = [Math]::Max(2, [Math]::Round($s * $bar[0]))
-    $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, $bar[1], $bar[2], $bar[3]))
-    $g.FillRectangle($brush, [int]$x, [int]($base - $h), [int]$w, [int]$h); $brush.Dispose(); $x += $w + $gap
-  }
+  # 余量 Headroom: a ring, green for what is left (65%), and a white dot where even use would be now.
+  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $c = $s / 2.0; $r = $s * 0.27; $pw = [Math]::Max(2.2, $s * 0.13)
+  $track = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 62, 67, 79), [float]$pw)
+  $g.DrawEllipse($track, [float]($c - $r), [float]($c - $r), [float](2 * $r), [float](2 * $r)); $track.Dispose()
+  $green = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 52, 199, 120), [float]$pw)
+  $green.StartCap = [System.Drawing.Drawing2D.LineCap]::Round; $green.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $g.DrawArc($green, [float]($c - $r), [float]($c - $r), [float](2 * $r), [float](2 * $r), -90, 234); $green.Dispose()
+  $angle = (-90 + 109) * [Math]::PI / 180; $dot = [Math]::Max(1.6, $s * 0.07)
+  $white = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 240, 242, 246))
+  $g.FillEllipse($white, [float]($c + $r * [Math]::Cos($angle) - $dot), [float]($c + $r * [Math]::Sin($angle) - $dot), [float](2 * $dot), [float](2 * $dot)); $white.Dispose()
   $g.Dispose(); return $bmp
 }
 function Get-DibFrame($bmp) {
@@ -56,23 +59,31 @@ foreach ($frame in $frames) { $dim = if ($frame[0] -ge 256) { 0 } else { $frame[
 foreach ($frame in $frames) { $writer.Write([byte[]]$frame[1]) }
 $writer.Flush(); [System.IO.File]::WriteAllBytes($iconPath, $ico.ToArray())
 
-$references = @('System.dll','System.Core.dll','System.Xml.dll','System.Xaml.dll','System.Security.dll','System.Management.dll','System.Net.Http.dll','System.Web.Extensions.dll','System.IO.Compression.dll','System.IO.Compression.FileSystem.dll','System.Drawing.dll','System.Windows.Forms.dll','WPF\WindowsBase.dll','WPF\PresentationCore.dll','WPF\PresentationFramework.dll')
+$references = @('System.dll','System.Core.dll','System.Xml.dll','System.Xaml.dll','System.Security.dll','System.Management.dll','System.Net.Http.dll','System.Web.Extensions.dll','System.IO.Compression.dll','System.IO.Compression.FileSystem.dll','System.Drawing.dll','System.Windows.Forms.dll','WPF\UIAutomationClient.dll','WPF\UIAutomationTypes.dll','WPF\WindowsBase.dll','WPF\PresentationCore.dll','WPF\PresentationFramework.dll')
+$webView2Dir = Join-Path $PSScriptRoot 'lib\webview2'
+$webView2Assemblies = @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.Wpf.dll')
+$webView2Files = $webView2Assemblies + @('WebView2Loader.dll')
 $sources = @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.cs' | Select-Object -ExpandProperty FullName)
-# Two executables from the same sources: the desktop app and the codeusage CLI.
-foreach ($target in @(@('winexe', 'codeusagemonit.exe', 'CodeUsageMonit.Program'), @('exe', 'codeusage.exe', 'CodeUsageMonit.CliProgram'))) {
+foreach ($target in @(,@('winexe', 'codeusagemonit.exe', 'CodeUsageMonit.Program'))) {
   $arguments = @('/nologo',('/target:'+$target[0]),'/platform:x64','/optimize+','/utf8output','/codepage:65001','/langversion:5',('/main:'+$target[2]),('/out:'+(Join-Path $OutputDirectory $target[1])),('/win32icon:'+$iconPath),('/win32manifest:'+(Join-Path $PSScriptRoot 'app.manifest')))
   foreach($reference in $references) { $arguments += '/reference:'+(Join-Path $compilerRoot $reference) }
+  # WebView2 SDK (the sign-in window for platforms read with a web console token).
+  foreach($reference in $webView2Assemblies) { $arguments += '/reference:'+(Join-Path $webView2Dir $reference) }
   $arguments += $sources
   & $compiler @arguments
   if ($LASTEXITCODE -ne 0) { throw ('C# build failed: ' + $target[1]) }
 }
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Panel.xaml') -Destination (Join-Path $OutputDirectory 'Panel.xaml') -Force
 # API list prices used for the cost estimates (compiled from the LiteLLM / models.dev catalogs).
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'pricing.json') -Destination (Join-Path $OutputDirectory 'pricing.json') -Force
 $iconDir = Join-Path $OutputDirectory 'icons'
 New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
 # Provider logos (single-colour SVG paths, tinted in the app; source in THIRD-PARTY-NOTICES.md).
 Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'icons') -Filter '*.svg' | Copy-Item -Destination $iconDir -Force
+# Built-in platform recipes (接入方案, see docs/platform-recipes.md).
+$platformDir = Join-Path $OutputDirectory 'platforms'
+New-Item -ItemType Directory -Path $platformDir -Force | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'platforms') -Filter '*.json' | Copy-Item -Destination $platformDir -Force
+foreach ($name in $webView2Files) { Copy-Item -LiteralPath (Join-Path $webView2Dir $name) -Destination (Join-Path $OutputDirectory $name) -Force }
 Write-Output ('Built '+(Join-Path $OutputDirectory 'codeusagemonit.exe'))
 
 function Find-InnoCompiler {
@@ -96,12 +107,15 @@ function New-PortableZip([string]$OutDir, [string]$RepoRoot, [string]$Version) {
   $stage = Join-Path ([System.IO.Path]::GetTempPath()) ('codeusagemonit-zip-' + [Guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $stage | Out-Null
   try {
-    foreach ($name in @('codeusagemonit.exe', 'codeusage.exe', 'app.ico', 'Panel.xaml', 'pricing.json')) {
+    foreach ($name in @('codeusagemonit.exe', 'app.ico', 'pricing.json') + $webView2Files) {
       Copy-Item -LiteralPath (Join-Path $OutDir $name) -Destination (Join-Path $stage $name)
     }
     $iconStage = Join-Path $stage 'icons'
     New-Item -ItemType Directory -Path $iconStage | Out-Null
     Copy-Item -Path (Join-Path $OutDir 'icons\*') -Destination $iconStage -Recurse
+    $platformStage = Join-Path $stage 'platforms'
+    New-Item -ItemType Directory -Path $platformStage | Out-Null
+    Copy-Item -Path (Join-Path $OutDir 'platforms\*') -Destination $platformStage -Recurse
     foreach ($name in @('LICENSE', 'README.md', '使用说明.md', 'THIRD-PARTY-NOTICES.md', 'install.ps1')) {
       Copy-Item -LiteralPath (Join-Path $RepoRoot $name) -Destination (Join-Path $stage $name)
     }
@@ -124,7 +138,7 @@ if ($Installer) {
   $out = [System.IO.Path]::GetFullPath($OutputDirectory)
   $repoRoot = [System.IO.Path]::GetFullPath((Split-Path (Split-Path $PSScriptRoot -Parent) -Parent))
   $version = Get-AppVersion
-  foreach ($name in @('codeusagemonit.exe', 'codeusage.exe', 'app.ico', 'Panel.xaml', 'pricing.json')) {
+  foreach ($name in @('codeusagemonit.exe', 'app.ico', 'pricing.json') + $webView2Files) {
     if (-not (Test-Path -LiteralPath (Join-Path $out $name))) { throw ('Missing build output: ' + $name) }
   }
   $zip = New-PortableZip $out $repoRoot $version

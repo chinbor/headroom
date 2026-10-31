@@ -22,6 +22,7 @@ namespace CodeUsageMonit {
         public string Label, ResetUtc;
         public double WindowSeconds;
         public double Used;
+        public double? UsedCount, LimitCount;
         public double Remaining { get { return Math.Max(0, 100 - Used); } }
     }
     public sealed class Balance { public string Currency; public double Amount; }
@@ -44,6 +45,10 @@ namespace CodeUsageMonit {
         public List<Quota> Quotas = new List<Quota>();
         public List<Balance> Balances = new List<Balance>();
         public List<ProductConsumption> ProductUsage = new List<ProductConsumption>();
+        // Daily usage from the platform's own console (PlatformUsage); replaces the local estimate.
+        public List<DayUsage> PlatformDays = new List<DayUsage>();
+        // The console token behind PlatformDays: "" not used, "ok", "expired" or "error".
+        public string PlatformAuth = "";
         public bool Stale;
         public int? ResetCreditsAvailable;
         public List<string> ResetCreditExpiries = new List<string>();
@@ -68,6 +73,14 @@ namespace CodeUsageMonit {
         public string Proxy = "auto";
         public int RefreshMinutes = 5;
         public bool PinWindow = false;
+        // Opt-in overlay in verified free space on the primary horizontal taskbar.
+        public bool TaskbarPanel = true;
+        // Balances below this are urgent, below twice this tight (0 turns balance alerts off).
+        public double BalanceWarn = 5;
+        // How new alerts are shown: "card" (the app's own card), "system" (tray balloon) or "off".
+        public string AlertStyle = "card";
+        public string[] SubscriptionOrder = new string[0];
+        public bool SimplifiedMode = true;
         public bool HideAccounts = true;
         public string[] Enabled = ProviderCatalog.DefaultEnabled;
         public int UiVersion;
@@ -128,13 +141,22 @@ namespace CodeUsageMonit {
         public static string Version { get { System.Version v = typeof(AppInfo).Assembly.GetName().Version; return v.Major + "." + v.Minor + "." + Math.Max(0, v.Build); } }
     }
     public static class ProviderCatalog {
-        public static readonly string[] Ids = { "codex", "claude", "cursor", "antigravity", "deepseek", "grok", "copilot", "kimi", "opencode", "zcode", "devin", "pi" };
-        // New installs start with the original six; the rest are opt-in in Settings.
-        public static readonly string[] DefaultEnabled = { "codex", "claude", "cursor", "antigravity", "deepseek", "grok" };
+        // Platforms read by code of their own. The others are platform recipes (CustomProviders.cs):
+        // built-in ones from platforms/*.json (DeepSeek, Agnes) and the user's own. The adapters for
+        // Cursor, Grok, Copilot and the rest stay in the source but are not offered for now.
+        public static readonly string[] Ids = { "codex", "claude" };
+        public static readonly string[] DefaultEnabled = { "claude", "codex" };
         // Not a quota provider: a page of usage that went through third-party endpoints.
         public const string ThirdParty = "thirdparty";
-        // User-defined HTTP JSON providers (CustomProviders.cs), keyed by "custom-…" id.
-        public static readonly Dictionary<string, CustomProvider> Custom = new Dictionary<string, CustomProvider>();
+        // Platform recipes by id: built-in ("deepseek", "agnes") and the user's ("custom-…").
+        public static readonly Dictionary<string, CustomProvider> Custom = Recipes(new CustomProvider[0]);
+        private static Dictionary<string, CustomProvider> Recipes(IEnumerable<CustomProvider> user) {
+            var all = new Dictionary<string, CustomProvider>();
+            foreach (CustomProvider p in CustomProviders.Builtin().Concat(user)) if (!all.ContainsKey(p.Id) && !Ids.Contains(p.Id)) all[p.Id] = p;
+            return all;
+        }
+        // Replaces the user recipes; the built-in ones always stay.
+        public static void Use(IEnumerable<CustomProvider> user) { var all = Recipes(user.Where(p => !p.Builtin)); Custom.Clear(); foreach (var pair in all) Custom[pair.Key] = pair.Value; }
         public static IEnumerable<string> All { get { return Ids.Concat(Custom.Keys.OrderBy(k => k, StringComparer.Ordinal)); } }
         public static bool IsKnown(string id) { return Ids.Contains(id) || Custom.ContainsKey(id); }
         // Providers without an account quota: only local session logs.
@@ -143,7 +165,7 @@ namespace CodeUsageMonit {
         // it covers every device signed in to the account.
         public static bool AccountUsage(string id) { return id == "cursor"; }
         // The local client a provider's usage is read from, when it is not the obvious one.
-        public static string UsageSource(string id) { return id == "deepseek" ? "DeepSeek Harness" : null; }
+        public static string UsageSource(string id) { return null; }
         public static string UsageTitle(string id) { return AccountUsage(id) ? "账户用量" : "本机用量"; }
         public static string Name(string id) {
             CustomProvider custom; if (id != null && Custom.TryGetValue(id, out custom)) return custom.Name;
@@ -154,7 +176,10 @@ namespace CodeUsageMonit {
             switch (id) { case "codex": return "#63D5E5"; case "claude": return "#E8AB8C"; case "cursor": return "#80DDAB"; case "antigravity": return "#B8A0F5"; case "deepseek": return "#7FA9FF"; case "grok": return "#D8DEE9"; case "copilot": return "#E58FD0"; case "kimi": return "#F4C95D"; case "opencode": return "#A6D96A"; case "zcode": return "#F2874E"; case "devin": return "#58C9B0"; case "pi": return "#A9B4C6"; case ThirdParty: return "#9DB4CF"; default: return "#8CB9FF"; }
         }
         public static string Help(string id) {
-            if (id != null && Custom.ContainsKey(id)) return "检查接口地址、字段路径和密钥（设置 → 自定义平台），然后刷新。";
+            CustomProvider recipe; if (id != null && Custom.TryGetValue(id, out recipe)) {
+                if (recipe.ConsoleToken) return "在设置里点“登录”，在弹出的页面登录后自动读取。" + recipe.TokenHint;
+                return recipe.Builtin ? "在设置里点“配置”填写密钥后刷新。" : "检查接入方案里的地址、字段路径和密钥（设置 → 订阅 → 配置），然后刷新。";
+            }
             switch (id) {
                 case "codex": return "使用 Codex 应用或 CLI 登录后，点击刷新。";
                 case "claude": return "使用 Claude Code 登录后，点击刷新。";
@@ -174,7 +199,6 @@ namespace CodeUsageMonit {
         // Environment variables checked before the key saved in Settings.
         public static string[] KeyEnv(string id, AppConfig config) {
             switch (id) {
-                case "deepseek": return new[] { "DEEPSEEK_API_KEY" };
                 case "kimi": return new[] { "KIMI_CODE_API_KEY" };
                 case "opencode": return new[] { "OPENCODE_API_KEY" };
                 case "zcode": return config != null && config.ZaiRegion == "global" ? new[] { "Z_AI_API_KEY" } : new[] { "Z_AI_API_KEY", "BIGMODEL_API_KEY", "ZHIPU_API_KEY", "ZHIPUAI_API_KEY", "GLM_API_KEY" };
@@ -645,13 +669,6 @@ namespace CodeUsageMonit {
                         try { Parsers.CursorGrokBot(s, await CursorDashboard("get-sand-usage-status", "{}").ConfigureAwait(false)); } catch { }
                         s.Account = NativeCredentials.SqliteText(db, "cursorAuth/cachedEmail"); break;
                     }
-                    case "deepseek": {
-                        string key = Store.DeepSeekKey();
-                        // No API key but DeepSeek Harness in use: its local usage is all there is to show.
-                        // (The Harness signs in with a DeepSeek platform grant that the balance API does not accept.)
-                        if (String.IsNullOrWhiteSpace(key) && HarnessLogs.Present) { string at = DateTime.UtcNow.ToString("o"); return new ProviderState { Id = id, Status = "ready", Message = "仅本机用量", Plan = "DeepSeek Harness", LastSuccess = at, LastAttempt = at }; }
-                        Need(key, id); s = Parsers.DeepSeek(await Request("https://api.deepseek.com/user/balance", key, null, null, null).ConfigureAwait(false)); break;
-                    }
                     case "grok": {
                         // Session recovery and the credits fallback follow GitHub issue #17 (@xing-skyline).
                         string authPath = ConfigPath("GROK_HOME", ".grok", "auth.json");
@@ -726,6 +743,9 @@ namespace CodeUsageMonit {
                     default: {
                         CustomProvider custom;
                         if (!ProviderCatalog.Custom.TryGetValue(id, out custom)) throw new ProviderException("不支持的平台", "setup");
+                        // DeepSeek with only an API key (no console sign-in): the official balance endpoint, no daily usage.
+                        string apiKey = id == "deepseek" && !Store.HasSavedKey(id) ? Store.SavedKey("deepseek-apikey") : null;
+                        if (!String.IsNullOrEmpty(apiKey)) { s = Parsers.DeepSeek(await KeyedRequest(id, "https://api.deepseek.com/user/balance", apiKey, null).ConfigureAwait(false)); s.Plan = "API Key · 只读余额"; break; }
                         s = await CustomProviders.Fetch(client, custom, Store.SavedKey(id), DateTime.UtcNow).ConfigureAwait(false); break;
                     }
                 }

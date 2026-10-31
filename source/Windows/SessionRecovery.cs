@@ -89,7 +89,8 @@ namespace CodeUsageMonit {
         public static bool AgySupportsUsage(string versionOutput) {
             var m = System.Text.RegularExpressions.Regex.Match(versionOutput ?? "", @"(\d+)\.(\d+)\.(\d+)");
             if (!m.Success) return false;
-            return Updates.Compare(m.Groups[1].Value + "." + m.Groups[2].Value + "." + m.Groups[3].Value, "1.1.11") >= 0;
+            int major = Int32.Parse(m.Groups[1].Value), minor = Int32.Parse(m.Groups[2].Value), patch = Int32.Parse(m.Groups[3].Value);
+            return major != 1 ? major > 1 : minor != 1 ? minor > 1 : patch >= 11;
         }
         // A failed read (not signed in: agy waits at "Select login method" until the timeout; too
         // old; no report) is not repeated for the spacing window.

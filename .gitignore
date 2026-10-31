@@ -2,6 +2,7 @@
 data/
 verification/
 dist/
+artifacts/
 *.key
 *.log
 auth.json

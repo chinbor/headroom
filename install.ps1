@@ -1,17 +1,17 @@
-# codeusagemonit installer for Windows 10 / 11 (x64), no admin rights needed.
+# Headroom (codeusagemonit) installer for Windows 10 / 11 (x64), no admin rights needed.
 #
-#   irm https://raw.githubusercontent.com/fanchengliu/codeusagemonit/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/chinbor/headroom/main/install.ps1 | iex
 #
 # Downloads the latest release from GitHub, checks it against the release's SHA256SUMS.txt,
-# installs to %LOCALAPPDATA%\Programs\codeusagemonit, puts codeusage on the user PATH and
-# adds a Start menu shortcut. Running it again updates in place; the data folder is kept.
+# installs to %LOCALAPPDATA%\Programs\codeusagemonit and adds a Start menu shortcut.
+# Running it again updates in place; the data folder is kept.
 # Optional: $env:CODEUSAGEMONIT_DIR to install elsewhere, $env:CODEUSAGEMONIT_VERSION = '1.0.0'.
 
 & {
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $repo = 'fanchengliu/codeusagemonit'
+    $repo = 'chinbor/headroom'
     $dir = if ($env:CODEUSAGEMONIT_DIR) { $env:CODEUSAGEMONIT_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\codeusagemonit' }
     $headers = @{ 'User-Agent' = 'codeusagemonit-installer' }
 
@@ -56,23 +56,13 @@
         Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    # codeusage on the user PATH.
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $parts = @(if ($userPath) { $userPath.Split(';') | Where-Object { $_ } })
-    if ($parts -notcontains $dir) {
-        [Environment]::SetEnvironmentVariable('Path', (($parts + $dir) -join ';'), 'User')
-        $env:Path = $env:Path.TrimEnd(';') + ';' + $dir
-        Write-Host "codeusagemonit: added $dir to your user PATH (new terminals pick it up)."
-    }
-
     # Start menu shortcut.
     $programs = [Environment]::GetFolderPath('Programs')
-    $link = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $programs 'codeusagemonit.lnk'))
+    $link = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $programs 'Headroom.lnk'))
     $link.TargetPath = Join-Path $dir 'codeusagemonit.exe'; $link.WorkingDirectory = $dir; $link.IconLocation = (Join-Path $dir 'codeusagemonit.exe') + ',0'; $link.Save()
 
     Write-Host ''
-    Write-Host "codeusagemonit $($release.tag_name) installed to $dir" -ForegroundColor Green
-    Write-Host '  Start it from the Start menu, or run: codeusagemonit'
-    Write-Host '  Terminal: codeusage status, codeusage cost --days 7'
+    Write-Host "Headroom $($release.tag_name) installed to $dir" -ForegroundColor Green
+    Write-Host '  Start it from the Start menu (Headroom).'
     Write-Host '  Update: run this command again.'
 }

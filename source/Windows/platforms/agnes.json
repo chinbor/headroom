@@ -1,0 +1,31 @@
+{
+  "id": "agnes",
+  "name": "Agnes",
+  "color": "#7B8EF2",
+  "url": "https://platform-backend.agnes-ai.cn/api/cn/user/subscription",
+  "auth": "bearer",
+  "headers": { "X-User-Language": "zh-CN" },
+  "token": {
+    "kind": "console",
+    "console": "https://platform.agnes-ai.cn/settings/usage",
+    "copy": "copy(localStorage.token.replace(/^\"|\"$/g, '')), 'token 已复制'",
+    "read": "localStorage.token && localStorage.token.replace(/^\"|\"$/g, '')",
+    "hint": "用网页控制台的登录 token 读取套餐额度和每日用量，不是 API Key。"
+  },
+  "success": { "code": "code", "ok": [0, 200], "expired": [401, 403] },
+  "plan": "data.plan_name",
+  "planLabel": "Token Plan",
+  "windows": [
+    { "label": "文本 · 5 小时", "usedPercent": "data.usage.text_generation.windowed.usage_pct", "used": "data.usage.text_generation.windowed.used", "limit": "data.usage.text_generation.windowed.limit", "resetInSeconds": "data.usage.text_generation.windowed.reset_in_seconds", "windowHours": 5 },
+    { "label": "文本 · 每周", "usedPercent": "data.usage.text_generation.weekly.usage_pct", "used": "data.usage.text_generation.weekly.used", "limit": "data.usage.text_generation.weekly.limit", "resetInSeconds": "data.usage.text_generation.weekly.reset_in_seconds", "windowHours": 168 },
+    { "label": "图像 · 每日", "usedPercent": "data.usage.image_generation.daily.usage_pct", "used": "data.usage.image_generation.daily.used", "limit": "data.usage.image_generation.daily.limit", "resetInSeconds": "data.usage.image_generation.daily.reset_in_seconds", "windowHours": 24 },
+    { "label": "视频 · 每日", "usedPercent": "data.usage.video_generation.daily.usage_pct", "used": "data.usage.video_generation.daily.used", "limit": "data.usage.video_generation.daily.limit", "resetInSeconds": "data.usage.video_generation.daily.reset_in_seconds", "windowHours": 24 }
+  ],
+  "usage": {
+    "url": "https://platform-backend.agnes-ai.cn/api/usage/series?range=custom&start_date={from}&end_date={to}",
+    "items": "data.items",
+    "day": "bucket",
+    "tokens": ["text_tokens"],
+    "requests": "request_count"
+  }
+}

@@ -9,6 +9,315 @@ namespace CodeUsageMonit {
         public static int Run() {
             var passed = new List<string>(); var failed = new List<string>();
             Action<string, Action> test = (name, check) => { try { check(); passed.Add(name); } catch (Exception e) { failed.Add(name + ": " + e.Message); } };
+            test("Taskbar warnings count platforms, exclude stale and sort tightest", () => {
+                var a = new ProviderState { Id = "a", Status = "ready" }; a.Quotas.Add(new Quota { Label = "日", Used = 85 }); a.Quotas.Add(new Quota { Label = "周", Used = 90 });
+                var b = new ProviderState { Id = "b", Status = "ready" }; b.Quotas.Add(new Quota { Label = "周", Used = 92 });
+                var c = new ProviderState { Id = "c", Status = "ready" }; c.Quotas.Add(new Quota { Label = "周", Used = 20 });
+                var d = new ProviderState { Id = "d", Status = "error", Stale = true }; d.Quotas.Add(new Quota { Label = "日", Used = 99 });
+                var e = new ProviderState { Id = "e", Status = "setup" };
+                var summary = SubscriptionView.Classify(new[] { a, b, c, d, e });
+                Require(summary.Alerts.Count == 2 && summary.Normal.Count == 1 && summary.Attention.Count == 2 && summary.Alerts[0].State == b && summary.Alerts[1].Window == "每周");
+                Require(summary.Headline == "▲ 2 项告警" && SubscriptionView.Classify(new[] { c }).Headline == "● 全部充足" && SubscriptionView.Classify(new[] { c, e }).Headline == "○ 1 项异常");
+                Require(SubscriptionView.Summary(d).Contains("旧") && SubscriptionView.Missing(e) == "未连接");
+            });
+            test("Balances alert below the warn line and share the quota scale", () => {
+                double saved = SubscriptionView.BalanceWarn;
+                try {
+                    SubscriptionView.BalanceWarn = 5;
+                    var low = new ProviderState { Id = "deepseek", Status = "ready" }; low.Balances.Add(new Balance { Currency = "CNY", Amount = 0.29 });
+                    var tight = new ProviderState { Id = "x", Status = "ready" }; tight.Balances.Add(new Balance { Currency = "USD", Amount = 8.62 });
+                    var rich = new ProviderState { Id = "y", Status = "ready" }; rich.Balances.Add(new Balance { Currency = "USD", Amount = 40 });
+                    var o = SubscriptionView.Classify(new[] { rich, tight, low });
+                    Require(o.Alerts.Count == 2 && o.Alerts[0].State == low && o.Alerts[0].Urgent && o.Alerts[0].Value == "¥0.29" && o.Alerts[0].Window == "余额");
+                    Require(!o.Alerts[1].Urgent && o.Normal.Count == 1);
+                    SubscriptionView.BalanceWarn = 0;
+                    Require(SubscriptionView.Classify(new[] { low }).Alerts.Count == 0);
+                } finally { SubscriptionView.BalanceWarn = saved; }
+            });
+            test("Taskbar row degrades: fewer rings, then rings only, then one ring", () => {
+                int r = TaskbarPanel.RingWidth;
+                var full = TaskbarPanel.Fit(10000, 120, 3);
+                Require(full.Primary && full.Rings == 3 && full.Width == 6 + 120 + 8 + 3 * r + 6);
+                var two = TaskbarPanel.Fit(full.Width - 1, 120, 3);
+                Require(two.Primary && two.More > 0 && two.Rings + two.More == 3 && two.Width < full.Width);
+                var focus = TaskbarPanel.Fit(6 + 120 + 6, 120, 3);
+                Require(focus.Primary && focus.Rings == 0 && focus.More == 0);
+                var rings = TaskbarPanel.Fit(6 + 120 + 5, 120, 3);
+                Require(!rings.Primary && rings.Rings == 4 && rings.More == 0 && rings.Width == 6 + 4 * r + 6);
+                var tiny = TaskbarPanel.Fit(20, 120, 3);
+                Require(!tiny.Primary && tiny.Rings == 0 && tiny.Width <= 20);
+            });
+            test("Taskbar with many subscriptions: at most four rings plus a +N chip, edge cases drawn", () => {
+                int r = TaskbarPanel.RingWidth, c = TaskbarPanel.ChipWidth;
+                var many = TaskbarPanel.Fit(10000, 120, 11);
+                Require(many.Primary && many.Rings == TaskbarPanel.MaxRings && many.More == 7 && many.Width == 6 + 120 + 8 + 4 * r + c + 6);
+                var chipOnly = TaskbarPanel.Fit(6 + 120 + 8 + c + 6, 120, 11);
+                Require(chipOnly.Primary && chipOnly.Rings == 0 && chipOnly.More == 11);
+                var ringsOnly = TaskbarPanel.Fit(100, 120, 11);
+                Require(!ringsOnly.Primary && ringsOnly.Rings == 2 && ringsOnly.More == 10 && ringsOnly.Width <= 100);
+                // Every subscription is either drawn or counted in the chip.
+                for (int width = 20; width <= 400; width += 7) for (int n = 0; n <= 14; n++) {
+                    var plan = TaskbarPanel.Fit(width, 120, n);
+                    Require(plan.Width <= Math.Max(width, 38) && (plan.Rings == 0 && plan.More == 0 || plan.Rings + plan.More + (plan.Primary ? 1 : 0) == n + 1));
+                }
+                // Gallery: verification/taskbar-gallery.png, each case drawn on its taskbar colour.
+                var now = DateTime.UtcNow;
+                Func<string, double, string, ProviderState> make = (id, used, status) => {
+                    var s = new ProviderState { Id = id, Status = status, LastSuccess = now.ToString("o") };
+                    s.Quotas.Add(new Quota { Label = "每周", WindowSeconds = 604800, Used = used, ResetUtc = now.AddDays(3).ToString("o") }); return s;
+                };
+                Func<int, List<ProviderState>> set = n => Enumerable.Range(0, n).Select(i => make(i < 4 ? new[] { "codex", "claude", "deepseek", "agnes" }[i] : "custom-p" + i, (i * 37) % 100, "ready")).ToList();
+                var longName = set(4); longName[0] = make("custom-a-very-long-platform-name-for-testing", 62, "ready");
+                var failing = set(4).Select(s => { s.Status = "error"; s.Stale = true; return s; }).ToList();
+                var dark = System.Drawing.Color.FromArgb(32, 32, 32); var light = System.Drawing.Color.FromArgb(238, 238, 238); var tinted = System.Drawing.Color.FromArgb(60, 20, 56);
+                var cases = new[] {
+                    new { Name = "0 个订阅", Data = set(0), W = 320, H = 48, Back = dark },
+                    new { Name = "1 个", Data = set(1), W = 320, H = 48, Back = dark },
+                    new { Name = "4 个", Data = set(4), W = 320, H = 48, Back = tinted },
+                    new { Name = "12 个", Data = set(12), W = 400, H = 48, Back = dark },
+                    new { Name = "12 个 · 窄 170", Data = set(12), W = 170, H = 48, Back = dark },
+                    new { Name = "12 个 · 窄 110", Data = set(12), W = 110, H = 48, Back = dark },
+                    new { Name = "超长名称", Data = longName, W = 400, H = 48, Back = dark },
+                    new { Name = "全部读取失败", Data = failing, W = 320, H = 48, Back = dark },
+                    new { Name = "浅色任务栏", Data = set(6), W = 320, H = 48, Back = light },
+                    new { Name = "小任务栏 32", Data = set(6), W = 320, H = 32, Back = dark },
+                    new { Name = "大任务栏 72", Data = set(12), W = 480, H = 72, Back = dark },
+                };
+                using (var gallery = new System.Drawing.Bitmap(660, cases.Sum(k => k.H + 24) + 10))
+                using (var g = System.Drawing.Graphics.FromImage(gallery))
+                using (var font = new System.Drawing.Font("Microsoft YaHei UI", 9f)) {
+                    g.Clear(System.Drawing.Color.FromArgb(18, 18, 20)); int y = 6;
+                    foreach (var k in cases) {
+                        TaskbarPanel.Plan plan;
+                        using (var image = TaskbarPanel.Preview(k.Data, k.W, k.H, k.Back, out plan)) {
+                            Require(plan.Width <= Math.Min(k.W, 320 * Math.Max(.75, k.H / 48.0)) + 1 && image.Width == plan.Width);
+                            using (var strip = new System.Drawing.SolidBrush(k.Back)) g.FillRectangle(strip, 140, y + 2, 500, k.H);
+                            g.DrawImage(image, 140 + 500 - image.Width, y + 2);
+                            g.DrawString(k.Name + "\n" + (plan.Primary ? "焦点+" : "") + plan.Rings + " 环" + (plan.More > 0 ? " +" + plan.More : ""), font, System.Drawing.Brushes.Gainsboro, 6, y + 4);
+                        }
+                        y += k.H + 24;
+                    }
+                    Directory.CreateDirectory(Path.Combine(Store.Root, "verification"));
+                    gallery.Save(Path.Combine(Store.Root, "verification", "taskbar-gallery.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+            });
+            test("Taskbar focus: soonest run-out wins, then the lowest window or balance", () => {
+                var now = new DateTime(2026, 10, 31, 12, 0, 0, DateTimeKind.Utc);
+                var codex = new ProviderState { Id = "codex", Status = "ready" };
+                codex.Quotas.Add(new Quota { Label = "5 小时", WindowSeconds = 18000, Used = 50, ResetUtc = now.AddSeconds(14400).ToString("o") });   // runs out in 1h
+                var claude = new ProviderState { Id = "claude", Status = "ready" };
+                claude.Quotas.Add(new Quota { Label = "每周", WindowSeconds = 604800, Used = 75, ResetUtc = now.AddDays(1).ToString("o") });
+                var f = Pace.Primary(new[] { claude, codex }, now);
+                Require(f.State == codex && f.Title == "Codex 5 小时" && f.Value == "50%" && f.Alert && f.Sub == "预计 1时0分后用完");
+                var calm = new ProviderState { Id = "claude", Status = "ready" };
+                calm.Quotas.Add(new Quota { Label = "5 小时", WindowSeconds = 18000, Used = 30, ResetUtc = now.AddSeconds(3600).ToString("o") });
+                var low = new ProviderState { Id = "deepseek", Status = "ready" }; low.Balances.Add(new Balance { Currency = "CNY", Amount = 2 });
+                var g = Pace.Primary(new[] { calm, low }, now);
+                Require(g.State == low && g.Value == "¥2" && g.Sub == "余额告急" && Pace.Score(low) == 8);
+                var h = Pace.Primary(new[] { calm }, now);
+                Require(h.Sub == "1时0分后重置" && !h.Alert && Pace.Primary(new ProviderState[0], now) == null);
+            });
+            test("Urgent alerts notify once until they recover; stale readings never alert", () => {
+                var watch = new AlertWatch();
+                var s1 = new ProviderState { Id = "codex", Status = "ready" }; s1.Quotas.Add(new Quota { Label = "5 小时", Used = 85 });
+                Require(watch.Update(new[] { s1 }).Count == 1 && watch.Update(new[] { s1 }).Count == 0);
+                s1.Quotas[0].Used = 50; Require(watch.Update(new[] { s1 }).Count == 0);
+                s1.Quotas[0].Used = 90; Require(watch.Update(new[] { s1 }).Count == 1);
+                var old = new ProviderState { Id = "claude", Status = "error", Stale = true }; old.Quotas.Add(new Quota { Label = "周", Used = 99 });
+                Require(new AlertWatch().Update(new[] { old }).Count == 0);
+            });
+            test("Windows that run out within the hour alert early, then again once urgent", () => {
+                var now = new DateTime(2026, 10, 31, 12, 0, 0, DateTimeKind.Utc); var watch = new AlertWatch();
+                // 5h window, 4h left, 70% used in the first hour: 30% lasts ~26 minutes.
+                var s = new ProviderState { Id = "codex", Status = "ready" }; s.Quotas.Add(new Quota { Label = "5 小时", Used = 70, WindowSeconds = 18000, ResetUtc = now.AddHours(4).ToString("o") });
+                var first = watch.Update(new[] { s }, now);
+                Require(first.Count == 1 && first[0].Soon && first[0].Sub.StartsWith("预计 ") && watch.Update(new[] { s }, now).Count == 0);
+                s.Quotas[0].Used = 85; var urgent = watch.Update(new[] { s }, now);
+                Require(urgent.Count == 1 && !urgent[0].Soon);
+                var calm = new ProviderState { Id = "claude", Status = "ready" }; calm.Quotas.Add(new Quota { Label = "5 小时", Used = 10, WindowSeconds = 18000, ResetUtc = now.AddHours(4).ToString("o") });
+                Require(new AlertWatch().Update(new[] { calm }, now).Count == 0);
+            });
+            test("Usage totals give cache rate, speed, top model and the hour-of-day profile", () => {
+                var h = new UsageHistory(); var today = new DateTime(2026, 10, 31);
+                var a = new DayUsage { Day = "2026-10-31", Agent = "codex", Tokens = 1000, Cost = 2, Requests = 4, CachedTokens = 600, InputTokens = 300, CacheCreationTokens = 100, TimedOutput = 600, TimedSeconds = 10 };
+                a.Models.Add(new ModelUsage { Model = "gpt-5.5", Tokens = 700 }); a.Models.Add(new ModelUsage { Model = "gpt-5.5-mini", Tokens = 300 });
+                h.Days.Add(a);
+                h.Days.Add(new DayUsage { Day = "2026-10-30", Agent = "claude", Tokens = 400, Cost = 1, CostKnown = false });
+                h.Days.Add(new DayUsage { Day = "2026-10-01", Agent = "claude", Tokens = 9999 });   // outside 7 days
+                var sum = UsageCharts.Sum(h, today, 7);
+                Require(sum.Tokens == 1400 && sum.Cost == 3 && sum.Partial && Math.Abs(sum.CacheRate.Value - .6) < 1e-9 && Math.Abs(sum.Speed.Value - 60) < 1e-9);
+                var rows = UsageCharts.ByAgent(h, today, 7);
+                Require(rows.Count == 2 && rows[0].Agent == "codex" && rows[0].TopModel == "gpt-5.5" && rows[1].CacheRate == null);
+                var zone = TimeZoneInfo.CreateCustomTimeZone("UTC+8", TimeSpan.FromHours(8), "UTC+8", "UTC+8");
+                var hours = UsageCharts.Hours(new[] { new HourUsage { Hour = new DateTime(2026, 10, 31, 6, 0, 0), Tokens = 50 }, new HourUsage { Hour = new DateTime(2026, 10, 20, 6, 0, 0), Tokens = 70 } }, today, 7, zone);
+                Require(hours[14] == 50 && hours.Sum() == 50);
+            });
+            test("Usage charts keep empty days and rank platforms by total", () => {
+                var h = new UsageHistory();
+                h.Days.Add(new DayUsage { Day = "2026-10-31", Agent = "codex", Tokens = 300, Cost = 3 });
+                h.Days.Add(new DayUsage { Day = "2026-10-31", Agent = "claude", Tokens = 100, Cost = 5 });
+                h.Days.Add(new DayUsage { Day = "2026-10-29", Agent = "claude", Tokens = 50, Cost = 1 });
+                h.Days.Add(new DayUsage { Day = "2026-10-01", Agent = "codex", Tokens = 999, Cost = 9 });
+                var days = UsageCharts.Daily(h, new DateTime(2026, 10, 31), 7, false);
+                Require(days.Count == 7 && days[6].Total == 400 && days[4].Total == 50 && days[5].Total == 0 && days[0].Date == new DateTime(2026, 10, 25));
+                var tokens = UsageCharts.Ranking(days); var money = UsageCharts.Ranking(UsageCharts.Daily(h, new DateTime(2026, 10, 31), 7, true));
+                Require(tokens[0].Key == "codex" && tokens[1].Value == 150 && money[0].Key == "claude" && money[0].Value == 6);
+            });
+            test("Platform recipes: built-in DeepSeek and Agnes read console data and replace local logs", () => {
+                CustomProvider ds = ProviderCatalog.Custom["deepseek"], ag = ProviderCatalog.Custom["agnes"];
+                Require(ds.Builtin && ds.ConsoleToken && ag.Builtin && ag.Headers["X-User-Language"] == "zh-CN" && !ProviderCatalog.Ids.Contains("deepseek") && ProviderCatalog.Name("agnes") == "Agnes");
+                var tz = TimeSpan.FromHours(8); var zone = TimeZoneInfo.CreateCustomTimeZone("UTC+8", tz, "UTC+8", "UTC+8");
+                Require(CustomProviders.UsageUrl(ds.Usage.Url, new DateTime(2026, 10, 31), tz).EndsWith("amount?start=1790870400&end=1793462400&tz=28800"));
+                object series = J.Parse("{\"code\":0,\"data\":{\"biz_code\":0,\"biz_data\":{\"series\":[" +
+                    "{\"model\":\"deepseek-flash\",\"buckets\":[{\"time\":1793289600,\"usage\":{\"RESPONSE_TOKEN\":100,\"REQUEST\":2,\"PROMPT_CACHE_HIT_TOKEN\":1000,\"PROMPT_CACHE_MISS_TOKEN\":50}},{\"time\":1793376000,\"usage\":{\"RESPONSE_TOKEN\":0,\"REQUEST\":0,\"PROMPT_CACHE_HIT_TOKEN\":0,\"PROMPT_CACHE_MISS_TOKEN\":0}}]}," +
+                    "{\"model\":\"deepseek-v4-pro\",\"buckets\":[{\"time\":1793289600,\"usage\":{\"RESPONSE_TOKEN\":10,\"REQUEST\":1,\"PROMPT_CACHE_HIT_TOKEN\":0,\"PROMPT_CACHE_MISS_TOKEN\":40}}]}]}}}");
+                CustomProviders.Check(ds, series);
+                var days = CustomProviders.MapUsage(ds, series, zone);
+                Require(days.Count == 1 && days[0].Day == "2026-10-30" && days[0].Tokens == 1200 && days[0].CachedTokens == 1000 && days[0].OutputTokens == 110 && days[0].Requests == 3 && days[0].Models.Count == 2);
+                bool expired = false; try { CustomProviders.Check(ds, J.Parse("{\"code\":40003,\"msg\":\"Authorization Failed\",\"data\":null}")); } catch (ProviderException e) { expired = e.State == "expired"; }
+                Require(expired);
+                var wallet = CustomProviders.Map(ds, J.Parse("{\"code\":0,\"data\":{\"biz_code\":0,\"biz_data\":{\"normal_wallets\":[{\"currency\":\"CNY\",\"balance\":\"12.5\"}],\"bonus_wallets\":[{\"currency\":\"CNY\",\"balance\":\"0.5\"}]}}}"), DateTime.UtcNow);
+                Require(wallet.Balances.Count == 1 && wallet.Balances[0].Currency == "CNY" && wallet.Balances[0].Amount == 13 && wallet.Plan == "账户余额");
+                var agDays = CustomProviders.MapUsage(ag, J.Parse("{\"code\":200,\"data\":{\"range\":\"custom\",\"items\":[{\"bucket\":\"2026-10-30\",\"request_count\":711,\"text_tokens\":27926409,\"image_count\":17,\"video_seconds\":137},{\"bucket\":\"2026-10-31\",\"request_count\":0,\"text_tokens\":0}]}}"), zone);
+                Require(agDays.Count == 1 && agDays[0].Tokens == 27926409 && agDays[0].Requests == 711 && !agDays[0].CostKnown && CustomProviders.UsageUrl(ag.Usage.Url, new DateTime(2026, 10, 31), tz).EndsWith("start_date=2026-10-02&end_date=2026-10-31"));
+                var local = new UsageHistory();
+                local.Days.Add(new DayUsage { Day = "2026-10-30", Agent = "deepseek", Tokens = 5 });
+                local.Days.Add(new DayUsage { Day = "2026-10-30", Agent = "codex", Tokens = 7 });
+                local.Days.Add(new DayUsage { Day = "2026-10-30", Agent = "cursor", Tokens = 9 });   // not offered: left out
+                var dsState = new ProviderState { Id = "deepseek" }; dsState.PlatformDays = days;
+                var merged = PlatformUsage.Combine(local, new[] { dsState, new ProviderState { Id = "codex" } });
+                Require(merged.Days.Count == 2 && merged.Days.Single(d => d.Agent == "deepseek").Tokens == 1200 && merged.Days.Single(d => d.Agent == "codex").Tokens == 7 && local.Days.Count == 3);
+            });
+            test("Pace: even-use mark, run-out projection and the overview sentence", () => {
+                var now = new DateTime(2026, 10, 31, 12, 0, 0, DateTimeKind.Utc);
+                var q = new Quota { Label = "5 小时", WindowSeconds = 18000, Used = 80, ResetUtc = now.AddSeconds(9000).ToString("o") };
+                WindowPace p = Pace.Of(q, now);
+                Require(p != null && Math.Abs(p.Elapsed - .5) < 1e-9 && Math.Abs(p.Even - 50) < 1e-9 && p.Short && Math.Abs(p.RunOut.Value.TotalSeconds - 2250) < 1e-6);
+                Require(Pace.Note(p, q.Remaining) == "预计 38 分钟后用完");
+                var slow = new Quota { Label = "每周", WindowSeconds = 604800, Used = 10, ResetUtc = now.AddDays(3.5).ToString("o") };
+                Require(!Pace.Of(slow, now).Short && Pace.Note(Pace.Of(slow, now), slow.Remaining) == "用得比均速慢，够用");
+                Require(Pace.Of(new Quota { WindowSeconds = 0, Used = 5, ResetUtc = now.AddHours(1).ToString("o") }, now) == null);
+                var codex = new ProviderState { Id = "codex", Status = "ready" }; codex.Quotas.Add(q); codex.Quotas.Add(slow);
+                var calm = new ProviderState { Id = "claude", Status = "ready" }; calm.Quotas.Add(slow);
+                Require(Pace.Headline(new[] { codex, calm }, now).StartsWith("1 项需要注意 · Codex 5 小时 预计 38 分钟后用完"));
+                Require(Pace.Headline(new[] { calm }, now) == "全部充足，照现在的速度都撑得到重置");
+            });
+            test("Balance ledger: drops are spend on that day, rises are top-ups, first reading is a baseline", () => {
+                var l = new BalanceLedger(); var day1 = new DateTime(2026, 10, 30, 9, 0, 0); var day2 = new DateTime(2026, 10, 31, 9, 0, 0);
+                Func<double, Balance[]> cny = v => new[] { new Balance { Currency = "CNY", Amount = v } };
+                Require(BalanceSpend.Record(l, "deepseek", cny(20), day1) && l.Days.Count == 0 && l.Since == "2026-10-30");
+                Require(!BalanceSpend.Record(l, "deepseek", cny(20), day1));
+                BalanceSpend.Record(l, "deepseek", cny(18.5), day1);
+                BalanceSpend.Record(l, "deepseek", cny(48.5), day2);   // top-up of 30
+                BalanceSpend.Record(l, "deepseek", cny(47), day2);
+                var today = BalanceSpend.Spent(l, "deepseek", day2, 1); var week = BalanceSpend.Spent(l, "deepseek", day2, 7);
+                Require(Math.Abs(today["CNY"] - 1.5) < 1e-9 && Math.Abs(week["CNY"] - 3) < 1e-9 && l.Days.Single(d => d.Day == "2026-10-31").TopUp == 30);
+                Require(BalanceSpend.Summary(l, "deepseek", day2) == "今日 ¥1.5 · 7 天 ¥3 · 30 天 ¥3" && BalanceSpend.Summary(l, "other", day2) == null);
+                BalanceSpend.Record(l, "deepseek", cny(47), day2.AddDays(45));
+                Require(l.Days.Count == 0 && BalanceSpend.Note(l, day2).StartsWith("自 10/30 起记录"));
+            });
+            test("Usage totals sum today, 7 and 30 days and flag unpriced tokens", () => {
+                var today = new DateTime(2026, 10, 31);
+                var h = new UsageHistory();
+                h.Days.Add(new DayUsage { Day = "2026-10-31", Agent = "codex", Tokens = 1000, Cost = 1 });
+                h.Days.Add(new DayUsage { Day = "2026-10-31", Agent = "claude", Tokens = 500, Cost = 2 });
+                h.Days.Add(new DayUsage { Day = "2026-10-25", Agent = "codex", Tokens = 100, Cost = .5 });
+                h.Days.Add(new DayUsage { Day = "2026-10-24", Agent = "codex", Tokens = 10, Cost = .1, UnpricedTokens = 3 });
+                h.Days.Add(new DayUsage { Day = "2026-09-01", Agent = "codex", Tokens = 99999, Cost = 99 });
+                var t = UsageTotals.From(h, today);
+                Require(t.TodayTokens == 1500 && t.TodayCost == 3 && t.WeekTokens == 1600 && t.MonthTokens == 1610 && Math.Abs(t.MonthCost - 3.6) < 1e-9 && t.Partial);
+                Require(UsageTotals.Tokens(1234567) == "1.23M" && UsageTotals.Usd(3.6) == "$3.60" && !UsageTotals.From(null, today).Partial);
+            });
+            test("Third-party usage follows the switch timeline; history before tracking stays unattributed", () => {
+                var log = new EndpointLog();
+                log.Marks.Add(new EndpointMark { App = "claude", Official = true, Since = "2026-09-20T00:00:00Z" });
+                log.Marks.Add(new EndpointMark { App = "claude", Host = "relay.example.com", Key = "abc123", Name = "Relay", Since = "2026-09-25T00:00:00Z" });
+                var claude = new LogIndex(); claude.Files.Add(new LogFile { Hours = { { "2026091810||m", new Bucket { I = 7, R = 1 } }, { "2026092210||m", new Bucket { I = 50, R = 1 } }, { "2026092610||m", new Bucket { I = 300, R = 2, D = 3 } }, { "2026092310|" + ClaudeLogs.NoRequestId + "|m", new Bucket { I = 20, R = 1 } }, { "2026091010|" + ClaudeLogs.NoRequestId + "|m", new Bucket { I = 5, R = 1 } } } });
+                var codex = new LogIndex(); codex.Files.Add(new LogFile { Hours = { { "2026092610|custom|g", new Bucket { I = 40, R = 1, U = 40 } }, { "2026092610|openai|g", new Bucket { I = 900, R = 3 } } } });
+                var report = ThirdPartyReport.Build(codex, claude, log, new UsageHistory(), new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Utc);
+                var relay = report.Endpoints.First(e => e.App == "claude" && e.Host.Length > 0); var unknown = report.Endpoints.First(e => e.App == "codex");
+                var bare = report.Endpoints.First(e => e.Key == ClaudeLogs.NoRequestId);
+                Require(report.Endpoints.Count == 3 && relay.Current && relay.Month == 300 && relay.Requests == 2 && Math.Abs(relay.CostMonth - 3) < 1e-9 && relay.Week == 300 && relay.Today == 0);
+                // No request-id: a relay even while settings.json looked official, and before tracking.
+                Require(bare.Month == 25 && !bare.Current && unknown.Host == "" && unknown.Month == 40 && unknown.CostPartial && report.ClaudeUnattributed == 7 && report.AppMonth("claude") == 325);
+            });
+            test("Switching relay inside an hour attributes each request to the endpoint in effect then", () => {
+                var log = new EndpointLog();
+                log.Marks.Add(new EndpointMark { App = "claude", Host = "a.example.com", Key = "aaaaaa", Name = "A", Since = "2026-09-30T09:00:00Z" });
+                log.Marks.Add(new EndpointMark { App = "claude", Host = "b.example.com", Key = "bbbbbb", Name = "B", Since = "2026-09-30T10:30:00Z" });
+                EndpointAttribution.Use(log);
+                try {
+                    // Switched A → B at 10:30; 900 tokens used on B at 10:40.
+                    string line = "{\"type\":\"assistant\",\"timestamp\":\"2026-09-30T10:40:00Z\",\"requestId\":\"req_x\",\"message\":{\"id\":\"msg_x\",\"model\":\"demo-claude\",\"usage\":{\"input_tokens\":800,\"output_tokens\":100}}}";
+                    var claude = new LogIndex(); var state = new LogFile { Name = "s.jsonl" }; claude.Files.Add(state);
+                    using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(line + "\n"))) ClaudeLogs.Read(claude, state, "s.jsonl", stream, 0);
+                    var report = ThirdPartyReport.Build(null, claude, log, new UsageHistory(), new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Utc);
+                    var a = report.Endpoints.FirstOrDefault(e => e.Name == "A"); var b = report.Endpoints.First(e => e.Name == "B");
+                    Require(b.Month == 900 && b.Current && (a == null || a.Month == 0));
+                } finally { EndpointAttribution.Use(null); }
+            });
+            test("Third-party dashboard ranks endpoints over a period and stacks bars by endpoint", () => {
+                var log = new EndpointLog();
+                log.Marks.Add(new EndpointMark { App = "claude", Host = "a.example.com", Key = "aaaaaa", Name = "A", Since = "2026-09-30T09:00:00Z" });
+                log.Marks.Add(new EndpointMark { App = "claude", Host = "b.example.com", Key = "bbbbbb", Name = "B", Since = "2026-09-30T10:30:00Z" });
+                var claude = new LogIndex(); claude.Files.Add(new LogFile { Name = "s.jsonl", Hours = {
+                    { "2026093009|anthropic|m1|a.example.com/aaaaaa", new Bucket { I = 1000, R = 2 } },
+                    { "2026093010|anthropic|m1|b.example.com/bbbbbb", new Bucket { I = 3000, R = 3, TN = 3, TO = 900, TS = 9 } },
+                    { "2026093010|anthropic|m2|", new Bucket { I = 5000, R = 1 } } } }); // official: not a relay
+                var codex = new LogIndex(); codex.Files.Add(new LogFile { Name = "r.jsonl", Hours = { { "2026093011|myrelay|gpt", new Bucket { I = 500, R = 1 } } } });
+                var period = ThirdPartyReport.Period(codex, claude, log, new DateTime(2026, 9, 30, 0, 0, 0), new DateTime(2026, 9, 30, 12, 0, 0), new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Utc);
+                Require(period.Hourly && period.Bars.Count == 12 && Math.Abs(period.Total.Tokens() - 4500) < 1e-9);
+                Require(period.Endpoints.Select(p => p.Label).SequenceEqual(new[] { "B", "A", "地址未记录的第三方接口" }));
+                EndpointPeriod top = period.Endpoints[0];
+                Require(top.Current && Math.Abs(top.Total.Speed().Value - 100) < 1e-9 && top.Color == ThirdPartyReport.Palette[0]);
+                ChartBar ten = period.Bars[10];
+                Require(ten.Parts.Count == 1 && ten.Parts[0].Name == "B" && Math.Abs(ten.Tokens - 3000) < 1e-9);
+                // A 4-hour window from 08:00 leaves B's 10:00 bucket in and the 11:00 Codex one out.
+                var narrow = ThirdPartyReport.Period(codex, claude, log, new DateTime(2026, 9, 30, 8, 0, 0), new DateTime(2026, 9, 30, 11, 0, 0), new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Utc);
+                Require(Math.Abs(narrow.Total.Tokens() - 4000) < 1e-9 && narrow.Endpoints.Last().Total.Tokens() == 0);
+            });
+            test("Dashboard pages keep two platforms and distinguish unknown from healthy", () => {
+                Require(QuotaDashboard.PageCount(0) == 1 && QuotaDashboard.PageCount(2) == 1 && QuotaDashboard.PageCount(3) == 2 && QuotaDashboard.PageCount(14) == 7);
+                Require(QuotaDashboard.Level(null) == "未知" && QuotaDashboard.Level(0) == "告急" && QuotaDashboard.Level(26) == "偏紧" && QuotaDashboard.Level(100) == "充足");
+            });
+            test("Recipes keep the token on their own host and reject unsafe headers", () => {
+                Func<string, bool> rejects = json => { try { CustomProviders.Parse(json); return false; } catch (ArgumentException) { return true; } };
+                Require(rejects("{\"name\":\"X\",\"url\":\"https://a.example.com/q\",\"auth\":\"bearer\",\"balance\":{\"amount\":\"b\"},\"usage\":{\"url\":\"https://evil.example.com/u\",\"items\":\"d\",\"day\":\"t\",\"tokens\":[\"n\"]}}"));
+                Require(rejects("{\"name\":\"X\",\"url\":\"https://a.example.com/q\",\"auth\":\"bearer\",\"headers\":{\"Authorization\":\"Bearer leak\"},\"balance\":{\"amount\":\"b\"}}"));
+                Require(rejects("{\"type\":\"agnes-plan\",\"name\":\"Agnes\"}"));
+                Require(rejects("{\"name\":\"X\",\"url\":\"https://a.example.com/q\",\"auth\":\"bearer\",\"token\":{\"kind\":\"console\"},\"balance\":{\"amount\":\"b\"}}"));
+                var user = CustomProviders.Parse(CustomProviders.Template);
+                Require(user.Id.StartsWith("custom-") && !user.Builtin && user.ConsoleToken && user.Usage != null && user.Usage.Items == "data.days");
+                var named = CustomProviders.Parse("{\"id\":\"deepseek\",\"name\":\"Mine\",\"url\":\"https://a.example.com/q\",\"balance\":{\"amount\":\"b\"}}");
+                Require(named.Id == "custom-deepseek");
+            });
+            test("Agnes maps four independent quota windows and relative resets", () => {
+                var now = new DateTime(2026, 10, 31, 0, 0, 0, DateTimeKind.Utc);
+                var state = CustomProviders.Map(ProviderCatalog.Custom["agnes"], J.Parse("{\"data\":{\"plan_name\":\"Pro\",\"usage\":{\"text_generation\":{\"windowed\":{\"used\":25,\"limit\":100,\"reset_in_seconds\":3600},\"weekly\":{\"used\":40,\"limit\":200,\"usage_pct\":30}},\"image_generation\":{\"daily\":{\"used\":0,\"limit\":20}},\"video_generation\":{\"daily\":{\"limit\":0}}}}}"), now);
+                Require(state.Plan == "Pro" && state.Quotas.Count == 4);
+                Require(state.Quotas[0].Remaining == 75 && state.Quotas[0].ResetUtc == now.AddHours(1).ToString("o"));
+                Require(state.Quotas[1].Remaining == 70 && state.Quotas[2].Remaining == 100 && state.Quotas[3].Remaining == 0);
+                Require(state.Quotas[0].UsedCount == 25 && state.Quotas[0].LimitCount == 100);
+            });
+            test("Agnes missing usage never invents a full allocation", () => {
+                bool rejected = false;
+                try { CustomProviders.Map(ProviderCatalog.Custom["agnes"], J.Parse("{\"data\":{\"usage\":{\"text_generation\":{\"windowed\":{\"limit\":100}}}}}"), DateTime.UtcNow); } catch (ProviderException) { rejected = true; }
+                Require(rejected);
+                rejected = false;
+                try { CustomProviders.Map(ProviderCatalog.Custom["agnes"], J.Parse("{}"), DateTime.UtcNow); } catch (ProviderException) { rejected = true; }
+                Require(rejected);
+            });
+            test("Taskbar gap shrinks or hides instead of overlapping occupied controls", () => {
+                var bar = new System.Windows.Rect(0, 1000, 1920, 48);
+                var occupied = new[] { new System.Windows.Rect(0, 1000, 1000, 48), new System.Windows.Rect(1620, 1000, 300, 48) };
+                var slot = TaskbarPanel.FreeSpace(bar, occupied);
+                Require(!slot.IsEmpty && slot.Width > 280 && !occupied.Any(r => r.IntersectsWith(slot)));
+                var crowded = TaskbarPanel.FreeSpace(bar, new[] { new System.Windows.Rect(0, 1000, 1550, 48), occupied[1] });
+                Require(crowded.IsEmpty);
+                var narrow = TaskbarPanel.FreeSpace(bar, new[] { new System.Windows.Rect(0, 1000, 1500, 48), occupied[1] });
+                Require(!narrow.IsEmpty && narrow.Width < 140);
+                Require(TaskbarPanel.FreeSpace(new System.Windows.Rect(0, 0, 48, 1000), occupied).IsEmpty);
+            });
             test("Codex weekly-only response does not invent a 5h window", () => {
                 var s = Parsers.Codex(J.Parse("{\"rate_limit\":{\"primary_window\":{\"used_percent\":38,\"limit_window_seconds\":604800,\"reset_at\":1900000000},\"secondary_window\":null}}"));
                 Require(s.Quotas.Count == 1 && s.Quotas[0].Label == "每周" && s.Quotas[0].Remaining == 62);
@@ -86,7 +395,6 @@ namespace CodeUsageMonit {
             });
             GrokTests.Run(test);
             RecoveryTests.Run(test);
-            UpdateTests.Run(test);
             test("Percentages are bounded and nonnumeric values ignored", () => {
                 var s = new ProviderState(); Parsers.Add(s, "one", -10, null); Parsers.Add(s, "two", 150, null); Parsers.Add(s, "bad", "NaN", null); Require(s.Quotas.Count == 2 && s.Quotas[0].Remaining == 100 && s.Quotas[1].Remaining == 0);
             });
@@ -268,19 +576,6 @@ namespace CodeUsageMonit {
                 string fingerprint = Endpoints.Fingerprint("sk-test-123456");
                 Require(fingerprint.Length == 6 && fingerprint == Endpoints.Fingerprint(" sk-test-123456 ") && Endpoints.Fingerprint("") == "");
             });
-            test("Third-party usage follows the switch timeline; history before tracking stays unattributed", () => {
-                var log = new EndpointLog();
-                log.Marks.Add(new EndpointMark { App = "claude", Official = true, Since = "2026-09-20T00:00:00Z" });
-                log.Marks.Add(new EndpointMark { App = "claude", Host = "relay.example.com", Key = "abc123", Name = "Relay", Since = "2026-09-25T00:00:00Z" });
-                var claude = new LogIndex(); claude.Files.Add(new LogFile { Hours = { { "2026091810||m", new Bucket { I = 7, R = 1 } }, { "2026092210||m", new Bucket { I = 50, R = 1 } }, { "2026092610||m", new Bucket { I = 300, R = 2, D = 3 } }, { "2026092310|" + ClaudeLogs.NoRequestId + "|m", new Bucket { I = 20, R = 1 } }, { "2026091010|" + ClaudeLogs.NoRequestId + "|m", new Bucket { I = 5, R = 1 } } } });
-                var codex = new LogIndex(); codex.Files.Add(new LogFile { Hours = { { "2026092610|custom|g", new Bucket { I = 40, R = 1, U = 40 } }, { "2026092610|openai|g", new Bucket { I = 900, R = 3 } } } });
-                var report = ThirdPartyReport.Build(codex, claude, log, new UsageHistory(), new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Utc);
-                var relay = report.Endpoints.First(e => e.App == "claude" && e.Host.Length > 0); var unknown = report.Endpoints.First(e => e.App == "codex");
-                var bare = report.Endpoints.First(e => e.Key == ClaudeLogs.NoRequestId);
-                Require(report.Endpoints.Count == 3 && relay.Current && relay.Month == 300 && relay.Requests == 2 && Math.Abs(relay.CostMonth - 3) < 1e-9 && relay.Week == 300 && relay.Today == 0);
-                // No request-id: a relay even while settings.json looked official, and before tracking.
-                Require(bare.Month == 25 && !bare.Current && unknown.Host == "" && unknown.Month == 40 && unknown.CostPartial && report.ClaudeUnattributed == 7 && report.AppMonth("claude") == 325);
-            });
             test("The running hour counts in full up to now; past range edges still split by overlap", () => {
                 DateTime hour = new DateTime(2026, 9, 30, 10, 0, 0, DateTimeKind.Utc), now = hour.AddMinutes(15);
                 var index = new LogIndex(); index.Files.Add(new LogFile { Name = "a.jsonl", Hours = { { "2026093010|openai|m", new Bucket { I = 1000, D = 4, R = 4 } }, { "2026093008|openai|m", new Bucket { I = 1000, D = 4, R = 4 } } } });
@@ -290,79 +585,6 @@ namespace CodeUsageMonit {
                 // A range ending at 08:15, asked at 10:15, takes a quarter of the 08:00 bucket.
                 Require(Math.Abs(index.Usage(hour.AddHours(-3), hour.AddHours(-2).AddMinutes(15), null, null, now).Tokens() - 250) < 1e-9);
                 Require(LogIndex.Weight(hour, hour.AddMinutes(-30), now, now) == 1 && LogIndex.Weight(hour, now, hour.AddHours(1), now) == 0 && LogIndex.Weight(hour.AddHours(-2), hour.AddHours(-2).AddMinutes(30), hour, now) == .5);
-            });
-            test("Switching relay inside an hour attributes each request to the endpoint in effect then", () => {
-                var log = new EndpointLog();
-                log.Marks.Add(new EndpointMark { App = "claude", Host = "a.example.com", Key = "aaaaaa", Name = "A", Since = "2026-09-30T09:00:00Z" });
-                log.Marks.Add(new EndpointMark { App = "claude", Host = "b.example.com", Key = "bbbbbb", Name = "B", Since = "2026-09-30T10:30:00Z" });
-                EndpointAttribution.Use(log);
-                try {
-                    // Switched A → B at 10:30; 900 tokens used on B at 10:40.
-                    string line = "{\"type\":\"assistant\",\"timestamp\":\"2026-09-30T10:40:00Z\",\"requestId\":\"req_x\",\"message\":{\"id\":\"msg_x\",\"model\":\"demo-claude\",\"usage\":{\"input_tokens\":800,\"output_tokens\":100}}}";
-                    var claude = new LogIndex(); var state = new LogFile { Name = "s.jsonl" }; claude.Files.Add(state);
-                    using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(line + "\n"))) ClaudeLogs.Read(claude, state, "s.jsonl", stream, 0);
-                    var report = ThirdPartyReport.Build(null, claude, log, new UsageHistory(), new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Utc);
-                    var a = report.Endpoints.FirstOrDefault(e => e.Name == "A"); var b = report.Endpoints.First(e => e.Name == "B");
-                    Require(b.Month == 900 && b.Current && (a == null || a.Month == 0));
-                } finally { EndpointAttribution.Use(null); }
-            });
-            test("Third-party dashboard ranks endpoints over a period and stacks bars by endpoint", () => {
-                var log = new EndpointLog();
-                log.Marks.Add(new EndpointMark { App = "claude", Host = "a.example.com", Key = "aaaaaa", Name = "A", Since = "2026-09-30T09:00:00Z" });
-                log.Marks.Add(new EndpointMark { App = "claude", Host = "b.example.com", Key = "bbbbbb", Name = "B", Since = "2026-09-30T10:30:00Z" });
-                var claude = new LogIndex(); claude.Files.Add(new LogFile { Name = "s.jsonl", Hours = {
-                    { "2026093009|anthropic|m1|a.example.com/aaaaaa", new Bucket { I = 1000, R = 2 } },
-                    { "2026093010|anthropic|m1|b.example.com/bbbbbb", new Bucket { I = 3000, R = 3, TN = 3, TO = 900, TS = 9 } },
-                    { "2026093010|anthropic|m2|", new Bucket { I = 5000, R = 1 } } } }); // official: not a relay
-                var codex = new LogIndex(); codex.Files.Add(new LogFile { Name = "r.jsonl", Hours = { { "2026093011|myrelay|gpt", new Bucket { I = 500, R = 1 } } } });
-                var period = ThirdPartyReport.Period(codex, claude, log, new DateTime(2026, 9, 30, 0, 0, 0), new DateTime(2026, 9, 30, 12, 0, 0), new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Utc);
-                Require(period.Hourly && period.Bars.Count == 12 && Math.Abs(period.Total.Tokens() - 4500) < 1e-9);
-                Require(period.Endpoints.Select(p => p.Label).SequenceEqual(new[] { "B", "A", "地址未记录的第三方接口" }));
-                EndpointPeriod top = period.Endpoints[0];
-                Require(top.Current && Math.Abs(top.Total.Speed().Value - 100) < 1e-9 && top.Color == ThirdPartyReport.Palette[0]);
-                ChartBar ten = period.Bars[10];
-                Require(ten.Parts.Count == 1 && ten.Parts[0].Name == "B" && Math.Abs(ten.Tokens - 3000) < 1e-9);
-                // A 4-hour window from 08:00 leaves B's 10:00 bucket in and the 11:00 Codex one out.
-                var narrow = ThirdPartyReport.Period(codex, claude, log, new DateTime(2026, 9, 30, 8, 0, 0), new DateTime(2026, 9, 30, 11, 0, 0), new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Utc);
-                Require(Math.Abs(narrow.Total.Tokens() - 4000) < 1e-9 && narrow.Endpoints.Last().Total.Tokens() == 0);
-            });
-            test("SQL export of one device imports once on another, never onto itself", () => {
-                string a = Path.Combine(Path.GetTempPath(), "cum-dev-a-" + Guid.NewGuid().ToString("N")), b = Path.Combine(Path.GetTempPath(), "cum-dev-b-" + Guid.NewGuid().ToString("N")), c = Path.Combine(Path.GetTempPath(), "cum-dev-c-" + Guid.NewGuid().ToString("N"));
-                string previous = Store.SwapData(a);
-                try {
-                    DateTime now = DateTime.UtcNow, h = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc).AddHours(-5);
-                    Store.Write("device.json", new DeviceIdentity { Id = "deviceaaaa01", Name = "A-PC" });
-                    var codex = new LogIndex(); codex.Files.Add(new LogFile { Name = "r1.jsonl", Hours = { { LogIndex.BucketKey(h, "openai", "gpt-6"), new Bucket { I = 100, O = 10, R = 1, D = .5 } }, { LogIndex.BucketKey(h.AddHours(1), "myrelay", "gpt-6"), new Bucket { I = 40, R = 1 } } } });
-                    codex.Files.Add(new LogFile { Name = "r2.jsonl", Hours = { { LogIndex.BucketKey(h, "openai", "gpt-6"), new Bucket { I = 1, R = 1 } } } }); // same hour, other file: one row
-                    Store.Write("codex-logs.json", codex);
-                    var claude = new LogIndex(); claude.Files.Add(new LogFile { Name = "s.jsonl", Hours = { { LogIndex.BucketKey(h, "anthropic", "opus", "relay.example.com/abc123"), new Bucket { I = 200, R = 2 } } } });
-                    Store.Write("claude-logs.json", claude);
-                    var cursor = new LogIndex(); cursor.Files.Add(new LogFile { Name = "cursor-dashboard", Hours = { { LogIndex.BucketKey(h, "", "auto"), new Bucket { I = 999, R = 1 } } } });
-                    Store.Write("cursor-logs.json", cursor);
-                    string sql = Devices.ExportSql(now, true);
-                    Require(sql.Contains("CREATE TABLE IF NOT EXISTS cum_usage_hours") && !sql.Contains("'cursor'") && sql.Contains("'A-PC'"));
-                    Require(Devices.ImportSql(sql, now).Own == 3);                       // onto itself: nothing
-                    Store.SwapData(b);
-                    Store.Write("device.json", new DeviceIdentity { Id = "devicebbbb02", Name = "B-PC" });
-                    ImportResult first = Devices.ImportSql(sql, now), again = Devices.ImportSql(sql, now);
-                    Require(first.Added == 3 && first.Devices.SequenceEqual(new[] { "A-PC" }) && again.Rows == 0 && again.Same == 3);
-                    // An older export of the same hours never lowers them.
-                    Require(Devices.ImportSql(sql.Replace(", 101, ", ", 50, "), now).Same == 3 && Math.Abs(Devices.Imported().Single().Tokens() - 351) < 1e-9);
-                    DeviceData imported = Devices.Imported().Single();
-                    Require(imported.Id == "deviceaaaa01" && Math.Abs(imported.Tokens() - 351) < 1e-9 && Math.Abs(imported.Cost() - .5) < 1e-9);
-                    Dictionary<string, LogIndex> merged = Devices.Attach(new Dictionary<string, LogIndex>(), Devices.Imported());
-                    Require(merged.ContainsKey("codex") && merged.ContainsKey("claude") && !merged.ContainsKey("cursor"));
-                    Require(merged["codex"].Entries().Any(e => e.Provider == "myrelay" && e.Endpoint == "?") && merged["claude"].Entries().Single().Endpoint == "relay.example.com/abc123");
-                    // A hand-edited id that is not a plain name is refused.
-                    Require(Devices.ImportSql(sql.Replace("'deviceaaaa01'", "'../evil'"), now).Skipped == 3);
-                    Devices.Remove("deviceaaaa01"); Require(Devices.Imported().Count == 0);
-                    // C already has the same Codex hour in its own logs (copied or synced): left out.
-                    Store.SwapData(c);
-                    Store.Write("device.json", new DeviceIdentity { Id = "devicecccc03", Name = "C-PC" });
-                    var mine = new LogIndex(); mine.Files.Add(new LogFile { Name = "copied.jsonl", Hours = { { LogIndex.BucketKey(h, "openai", "gpt-6"), new Bucket { I = 101, O = 10, R = 2 } } } }); Store.Write("codex-logs.json", mine);
-                    ImportResult copied = Devices.ImportSql(sql, now);
-                    Require(copied.Duplicate == 1 && copied.Added == 2 && Math.Abs(Devices.Imported().Single().Tokens() - 240) < 1e-9);
-                } finally { Store.SwapData(previous); foreach (string dir in new[] { a, b, c }) { try { Directory.Delete(dir, true); } catch { } } }
             });
             test("DeepSeek Harness sessions: zstd frames, model, cache and speed, read incrementally", () => {
                 // Synthetic session: header + message (2 s, 100 output) in two frames, then a
@@ -416,44 +638,6 @@ namespace CodeUsageMonit {
                 DateTime now = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
                 Require(Pacing.Due(DateTime.MinValue, 5, now) && Pacing.Due(now.AddMinutes(-5), 5, now) && Pacing.Due(now.AddSeconds(-290), 5, now) && !Pacing.Due(now.AddMinutes(-4), 5, now));
                 Require(Pacing.CountsAsWork("claude", @"C:\u\.claude\projects\p\s.jsonl") && !Pacing.CountsAsWork("cursor", @"C:\u\Cursor\User\globalStorage\storage.json") && Pacing.CountsAsWork("cursor", @"C:\u\Cursor\User\globalStorage\state.vscdb-wal"));
-            });
-            test("SQL reader handles quotes, comments and several rows per INSERT", () => {
-                var rows = Devices.Inserts("-- note; with a semicolon\nINSERT INTO cum_devices VALUES ('a''b', 'n;x', NULL, '1'); /* x; */ INSERT INTO t (p, q) VALUES (1, 'x'), (2.5e1, 'y');").ToList();
-                Require(rows.Count == 3 && rows[0].Key == "cum_devices" && (string)rows[0].Value["device_id"] == "a'b" && (string)rows[0].Value["name"] == "n;x" && rows[0].Value["exported_utc"] == null);
-                Require(rows[2].Key == "t" && (double)rows[2].Value["p"] == 25 && (string)rows[2].Value["q"] == "y");
-            });
-            test("Backups hold settings and indexes but not keys; restore and pruning", () => {
-                string dir = Path.Combine(Path.GetTempPath(), "cum-backup-" + Guid.NewGuid().ToString("N"));
-                string previous = Store.SwapData(dir);
-                try {
-                    Directory.CreateDirectory(Path.Combine(dir, "devices"));
-                    File.WriteAllText(Path.Combine(dir, "settings.json"), "{}"); File.WriteAllText(Path.Combine(dir, "codex-logs.json"), "{\"Version\":5}");
-                    File.WriteAllText(Path.Combine(dir, "deepseek.key"), "secret"); File.WriteAllText(Path.Combine(dir, "device.json"), "{}"); File.WriteAllText(Path.Combine(dir, "devices", "x1.json"), "{}");
-                    var config = new AppConfig { BackupKeep = 2 }; DateTime now = DateTime.UtcNow;
-                    string zip = Backups.Create(config, true, now);
-                    using (var archive = System.IO.Compression.ZipFile.OpenRead(zip)) {
-                        var names = archive.Entries.Select(e => e.FullName).OrderBy(n => n, StringComparer.Ordinal).ToList();
-                        Require(names.SequenceEqual(new[] { "backup.json", "codex-logs.json", "devices/x1.json", "settings.json" }));
-                    }
-                    for (int i = 1; i <= 3; i++) Backups.Create(config, true, now.AddSeconds(i));
-                    Backups.Create(config, false, now.AddSeconds(9));
-                    Require(Backups.Prune(config) == 2 && Backups.List(config).Count(x => x.Auto) == 2 && Backups.List(config).Count(x => !x.Auto) == 1);
-                    File.WriteAllText(Path.Combine(dir, "settings.json"), "{\"RefreshMinutes\":9}");
-                    Backups.Restore(config, Backups.List(config).First(x => x.Auto).Path, now.AddSeconds(20));
-                    Require(File.ReadAllText(Path.Combine(dir, "settings.json")) == "{}" && File.ReadAllText(Path.Combine(dir, "deepseek.key")) == "secret");
-                    Require(Backups.Included("devices/a.json") && !Backups.Included("devices/a/b.json") && !Backups.Included("../settings.json") && !Backups.Included("deepseek.key") && !Backups.Included("device.json"));
-                } finally { Store.SwapData(previous); try { Directory.Delete(dir, true); } catch { } }
-            });
-            test("WebDAV listing keeps only device files directly in the folder", () => {
-                string xml = "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\">" +
-                    "<d:response><d:href>/dav/cum/devices/</d:href></d:response><d:response><d:href>/dav/cum/devices/abc123.sql</d:href></d:response>" +
-                    "<d:response><d:href>/dav/cum/devices/sub/</d:href></d:response><d:response><d:href>/dav/cum/devices/notes.txt</d:href></d:response>" +
-                    "<d:response><d:href>https://dav.example.com/dav/cum/devices/def456.sql</d:href></d:response><d:response><d:href>/dav/cum/devices/%E4%B8%AD.sql</d:href></d:response></d:multistatus>";
-                Require(WebDavSync.Files(xml, "https://dav.example.com/dav/cum/devices/").SequenceEqual(new[] { "abc123.sql", "def456.sql" }));
-                Require(WebDavSync.Validate("http://dav.example.com/x") != null && WebDavSync.Validate("http://192.168.1.5/dav") == null && WebDavSync.Validate("https://u:p@dav.example.com/") != null);
-            });
-            test("Update check compares versions numerically", () => {
-                Require(Updates.Compare("v1.10.0", "1.9.2") > 0 && Updates.Compare("1.3", "1.3.0") == 0 && Updates.Compare("1.2.0", "1.3.0") < 0 && Updates.Compare("1.3.0-beta", "1.3.0") == 0);
             });
             test("A truncated log is read again from the start and its surviving records count", () => {
                 string dir = Path.Combine(Path.GetTempPath(), "codeusagemonit-trunc-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
@@ -560,51 +744,6 @@ namespace CodeUsageMonit {
             test("Most-used model is ordered by recorded tokens including cache", () => {
                 var day = new DayUsage { Day = "2026-01-01", Agent = "codex", Models = { new ModelUsage { Model = "test-a", Tokens = 91 }, new ModelUsage { Model = "test-b", Tokens = 10 } } };
                 Require(UsageDetails.MainModel(new[] { day }) == "test-a");
-            });
-            test("Window migration turns off legacy always-on-top and preserves provider selection", () => {
-                var config = new AppConfig { UiVersion = 0, PinWindow = true, AlwaysOnTop = true, Enabled = new[] { "codex" } };
-                WindowFrame.Normalize(config); Require(!config.AlwaysOnTop && config.UiVersion == 2 && config.Enabled.Length == 1);
-                config.WindowWidth = 560; WindowFrame.Normalize(config); Require(config.WindowWidth == 560);
-            });
-            test("Window geometry and zoom reject nonfinite values", () => {
-                var config = new AppConfig { UiVersion = 2, WindowWidth = Double.NaN, WindowHeight = -10, UiScale = Double.PositiveInfinity, WindowLeft = Double.NaN };
-                WindowFrame.Normalize(config); Require(config.WindowWidth == 420 && config.WindowHeight == 460 && config.UiScale == 1 && !config.WindowLeft.HasValue);
-            });
-            test("Display sizes: solid material becomes opaque acrylic, unknown sizes fall back to full", () => {
-                var config = new AppConfig { UiVersion = 2, Material = "solid", SurfaceOpacity = .3, DisplaySize = "huge", CompactProvider = "" };
-                WindowFrame.Normalize(config); Require(config.Material == "acrylic" && config.SurfaceOpacity == 1 && config.DisplaySize == "full" && config.CompactProvider == "overview");
-                config.SurfaceOpacity = Double.NaN; WindowFrame.Normalize(config); Require(config.SurfaceOpacity == WindowFrame.DefaultOpacity);
-            });
-            test("Surface colour: hex parsing, HSV round trip, contrast, invalid config falls back", () => {
-                System.Windows.Media.Color c;
-                Require(MonitorPanel.TryParseHex("#0f1b2d", out c) && MonitorPanel.Hex(c) == "#0F1B2D");
-                Require(MonitorPanel.TryParseHex("abc", out c) && MonitorPanel.Hex(c) == "#AABBCC");
-                Require(!MonitorPanel.TryParseHex("#12345", out c) && !MonitorPanel.TryParseHex("red", out c) && !MonitorPanel.TryParseHex(null, out c));
-                foreach (string hex in new[] { "#15171B", "#000000", "#FFFFFF", "#2A1218", "#0D2226", "#7F3FBF" }) {
-                    double h, s, v; MonitorPanel.TryParseHex(hex, out c); MonitorPanel.ToHsv(c, out h, out s, out v);
-                    Require(MonitorPanel.Hex(MonitorPanel.FromHsv(h, s, v)) == hex);
-                }
-                Require(MonitorPanel.Hex(MonitorPanel.FromHsv(360, 1, 1)) == "#FF0000" && MonitorPanel.Hex(MonitorPanel.FromHsv(120, 1, 1)) == "#00FF00");
-                Require(Math.Abs(MonitorPanel.ContrastRatio(System.Windows.Media.Colors.White, System.Windows.Media.Colors.Black) - 21) < 1e-9);
-                Require(MonitorPanel.ContrastRatio(System.Windows.Media.Color.FromRgb(0xF2, 0xF3, 0xF5), WindowFrame.DefaultTint) > 15);
-                var config = new AppConfig { UiVersion = 2, SurfaceColor = "not a colour" };
-                WindowFrame.Normalize(config); Require(config.SurfaceColor == "#15171B");
-                config.SurfaceColor = "#abc"; WindowFrame.Normalize(config); Require(config.SurfaceColor == "#AABBCC");
-            });
-            test("Per-size geometry keeps valid compact layouts and drops broken ones", () => {
-                var config = new AppConfig { UiVersion = 2 };
-                config.Layouts["small"] = new WindowGeometry { Width = 200, Height = 200, Left = Double.NaN, Top = 40 };
-                config.Layouts["full"] = new WindowGeometry { Width = 400, Height = 400 };
-                config.Layouts["large"] = new WindowGeometry { Width = Double.PositiveInfinity, Height = 400 };
-                WindowFrame.Normalize(config);
-                Require(config.Layouts.Count == 1 && !config.Layouts["small"].Left.HasValue && config.Layouts["small"].Top == 40);
-                config.Layouts = null; WindowFrame.Normalize(config); Require(config.Layouts != null);
-            });
-            test("Every display size's default fits between its resize limits", () => {
-                foreach (string size in new[] { "small", "medium", "large", "full" }) {
-                    System.Windows.Size min = WindowFrame.MinSize(size), def = WindowFrame.DefaultSize(size), max = WindowFrame.MaxSize(size);
-                    Require(min.Width <= def.Width && def.Width <= max.Width && min.Height <= def.Height && def.Height <= max.Height);
-                }
             });
             test("Grok turns: per-model usage, cached input split out, recorded cost wins, event ids dedupe", () => {
                 string line = "{\"timestamp\":1750000000,\"params\":{\"sessionId\":\"sess-1\",\"update\":{\"sessionUpdate\":\"turn_completed\",\"usage\":{\"modelUsage\":{\"grok-4.5-build\":{\"inputTokens\":100,\"outputTokens\":20,\"cachedReadTokens\":40,\"reasoningTokens\":10,\"costUsdTicks\":12345678901}}}},\"_meta\":{\"eventId\":\"evt-1\"}}}";

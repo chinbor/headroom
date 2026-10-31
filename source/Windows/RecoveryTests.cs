@@ -172,8 +172,9 @@ namespace CodeUsageMonit {
                 Check(J.Str(LocalDevin.DecodeJson(Encoding.Unicode.GetBytes(json)), "planName") == "Pro");
                 Check(LocalDevin.DecodeJson(Encoding.UTF8.GetBytes("not json")) == null && LocalDevin.DecodeJson(null) == null);
             });
-            test("Devin is listed and opt-in like the other added platforms", () => {
-                Check(ProviderCatalog.Ids.Contains("devin") && !ProviderCatalog.DefaultEnabled.Contains("devin") && ProviderCatalog.Name("devin") == "Devin" && ProviderCatalog.Help("devin").Length > 0);
+            test("Only Claude, Codex, DeepSeek and Agnes are offered for now", () => {
+                var offered = ProviderCatalog.All.Where(id => ProviderCatalog.Ids.Contains(id) || ProviderCatalog.Custom[id].Builtin).OrderBy(id => id).ToArray();
+                Check(String.Join(",", offered) == "agnes,claude,codex,deepseek" && !ProviderCatalog.IsKnown("devin") && ProviderCatalog.DefaultEnabled.SequenceEqual(new[] { "claude", "codex" }));
             });
         }
     }

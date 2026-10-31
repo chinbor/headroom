@@ -1,0 +1,33 @@
+{
+  "id": "deepseek",
+  "name": "DeepSeek",
+  "color": "#7FA9FF",
+  "url": "https://platform.deepseek.com/api/v0/users/get_user_summary",
+  "auth": "bearer",
+  "token": {
+    "kind": "console",
+    "console": "https://platform.deepseek.com/usage",
+    "copy": "copy(JSON.parse(localStorage.userToken).value), 'token 已复制'",
+    "read": "localStorage.userToken && JSON.parse(localStorage.userToken).value",
+    "hint": "用网页控制台的登录 token 读取余额和每日用量（按模型拆分），不是 API Key。"
+  },
+  "success": { "code": "code", "ok": [0], "expired": [40001, 40002, 40003] },
+  "planLabel": "账户余额",
+  "balance": {
+    "lists": ["data.biz_data.normal_wallets", "data.biz_data.bonus_wallets"],
+    "amount": "balance",
+    "currencyPath": "currency"
+  },
+  "usage": {
+    "url": "https://platform.deepseek.com/api/v0/usage/by_api_key/amount?start={fromUnix}&end={toUnix}&tz={tz}",
+    "groups": "data.biz_data.series",
+    "items": "buckets",
+    "model": "model",
+    "day": "time",
+    "input": "usage.PROMPT_CACHE_MISS_TOKEN",
+    "cached": "usage.PROMPT_CACHE_HIT_TOKEN",
+    "output": "usage.RESPONSE_TOKEN",
+    "requests": "usage.REQUEST",
+    "priced": true
+  }
+}

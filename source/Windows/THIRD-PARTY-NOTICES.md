@@ -18,9 +18,13 @@ Prices are the vendors' published list prices as recorded by these catalogs. The
 
 ## Provider logos
 
-The files in `icons/` are the logos of the monitored products, used unmodified only to identify each provider. They are taken from CodexBar (`Sources/CodexBar/Resources/ProviderIcon-<id>.svg`, MIT, Copyright (c) 2026 Peter Steinberger, license text in `licenses/CodexBar-MIT.txt`; `zcode.svg` is `ProviderIcon-zai.svg`). The logos and product names are trademarks of their respective owners; their use does not imply endorsement.
+The files in `icons/` are the logos of the monitored products, used unmodified only to identify each provider. They are taken from CodexBar (`Sources/CodexBar/Resources/ProviderIcon-<id>.svg`, MIT, Copyright (c) 2026 Peter Steinberger, license text in `licenses/CodexBar-MIT.txt`; `zcode.svg` is `ProviderIcon-zai.svg`). `agnes.svg` is the Agnes AI mark from lobe-icons (https://github.com/lobehub/lobe-icons, MIT), taken from usage-dash (`hooks/catalog.ts`) without its enclosing disc. The logos and product names are trademarks of their respective owners; their use does not imply endorsement.
 
 ## Projects studied as references (no code included)
+
+### usage-dash
+- https://github.com/chinbor/usage-dash — MIT, Copyright (c) 2026 chinbor. License text: `licenses/usage-dash-MIT.txt` at the repository root.
+- Reference for the Agnes platform login, subscription endpoint and quota-window fields; independently implemented in `AgnesPlan.cs`. No plugin configuration or credentials are included.
 
 ### CodexBar
 - https://github.com/steipete/CodexBar — MIT, Copyright (c) 2026 Peter Steinberger. License text kept in `licenses/CodexBar-MIT.txt`.

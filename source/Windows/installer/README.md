@@ -36,7 +36,7 @@ The first launch of an installed copy copies an existing `<exe>\data` into `%LOC
 Requires Windows 10 or 11 x64 and [Inno Setup 6.3 or newer](https://jrsoftware.org/isdl.php). No Visual Studio. The Simplified Chinese wizard text is `ChineseSimplified.isl` next to `codeusagemonit.iss` (see `THIRD-PARTY-NOTICES.md`). Inno Setup's own `Languages` folder is not used for it. `x64compatible` needs 6.3. The script calls `CopyFile` on 6.4 and newer, and `FileCopy` on 6.3, which is the only name that version has. The translation matches the message names from Inno Setup 6.5 through 7.1, so those versions compile it with no language warnings. 6.3 and 6.4 still compile: a message this file does not define falls back to English, and a message name newer than that compiler is ignored.
 
 ```powershell
-git clone https://github.com/fanchengliu/codeusagemonit.git
+git clone https://github.com/chinbor/headroom.git
 cd codeusagemonit
 .\source\Windows\build.ps1 -Installer
 .\codeusagemonit.exe --self-test

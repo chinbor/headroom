@@ -89,7 +89,7 @@ jobs:
 
       - name: Publish the GitHub release
         # Only a version tag or a manual run with publish ticked publishes. Pushes to main only build.
-        if: github.repository == 'fanchengliu/codeusagemonit' && (github.ref_type == 'tag' || inputs.publish == true || inputs.publish == 'true')
+        if: github.repository_owner == 'chinbor' && (github.ref_type == 'tag' || inputs.publish == true || inputs.publish == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: powershell
@@ -124,7 +124,7 @@ jobs:
           $exists = $LASTEXITCODE -eq 0
           $ErrorActionPreference = 'Stop'
           if (-not $exists) {
-            & gh release create $tag --draft --title "codeusagemonit $ver" --notes-file $notesPath $setup.FullName $zip $sums
+            & gh release create $tag --draft --title "余量 Headroom $ver" --notes-file $notesPath $setup.FullName $zip $sums
             if ($LASTEXITCODE -ne 0) { throw 'gh release create failed.' }
             & gh release edit $tag --draft=false --latest
             if ($LASTEXITCODE -ne 0) { throw 'gh release edit failed.' }
