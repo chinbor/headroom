@@ -2,7 +2,7 @@
 
 [← 返回项目](../../README.md) · [下载](https://github.com/chinbor/headroom/releases)
 
-> 适用于 余量 Headroom 2.1.0。连接方式：**OAuth**。
+> 适用于 余量 Headroom 2.2.2。连接方式：**OAuth**。
 
 ## 数据来源
 
@@ -28,7 +28,11 @@
 
 ## 限制
 
-这里查询的是 Claude Code 订阅的 OAuth 用量，不是 Anthropic Console API 账单。API Key 或第三方接口用量不一定消耗该订阅额度；第三方记录可在「第三方」页查看。Windows 版没有浏览器 Cookie 导入或 CodexBar 的网页 / PTY 回退。
+这里查询的是 Claude Code 订阅的 OAuth 用量，不是 Anthropic Console API 账单。
+
+pi 等第三方工具即使用 Claude 账号登录，也不占订阅额度：Anthropic 现在把第三方工具的调用记到另外付费的「额外用量」（extra usage）上，没开通时请求直接被拒绝。所以这里不像 [Codex](codex.md#第三方工具) 那样读第三方工具的记录，额度和本机统计都只算 Claude Code 自己的调用。
+
+API Key 或第三方接口用量不一定消耗该订阅额度；第三方记录可在「第三方」页查看。Windows 版没有浏览器 Cookie 导入或 CodexBar 的网页 / PTY 回退。
 
 费用为本机记录的 API 等价估算，不是订阅账单。数据范围受服务端返回字段、本机日志与所选时间段限制。
 

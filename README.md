@@ -32,11 +32,23 @@ Claude、Codex、DeepSeek、Agnes 还剩多少、什么时候重置、照现在�
 | 平台 | 怎么接入 | 显示的内容 |
 | --- | --- | --- |
 | [Claude](docs/providers/claude.md) | 复用 Claude Code 的登录 | 5 小时、每周额度；本机日志里的 token 和费用 |
-| [Codex](docs/providers/codex.md) | 复用 Codex 应用或 CLI 的登录 | 5 小时、每周额度；本机日志里的 token 和费用 |
+| [Codex](docs/providers/codex.md) | 复用 Codex 应用或 CLI 的登录 | 5 小时、每周额度；本机日志里的 token 和费用（含 pi、opencode 等第三方工具，见下文） |
 | [DeepSeek](docs/providers/deepseek.md) | 设置里点“登录”，在网页里登录；也可以只填 API Key（只读余额） | 余额、每天每个模型的 token、实际扣费 |
 | [Agnes](docs/providers/agnes.md) | 设置里点“登录”，在网页里登录 | 文本 5 小时、每周额度，图像和视频每日额度，每天的 token |
 
 点平台名看详细说明；想接入别的平台见[自定义平台](docs/providers/custom.md)。
+
+### 第三方工具的用量
+
+用 ChatGPT 账号登录的第三方编程工具（目前支持 [pi](https://pi.dev) 和 [opencode](https://opencode.ai)）和 Codex 共用同一份订阅额度：
+
+- **额度条**：本来就包含这些工具用掉的部分。额度是向 OpenAI 服务器查的账号总量，但服务器只给百分比，不区分是哪个工具用的。
+- **token 和费用**：Codex 自己的日志里没有这些工具的调用，所以程序还会读各工具在本机的记录，把它们调用 OpenAI 的用量计入 Codex。
+- **只算订阅内的调用**：只有该工具用 ChatGPT 账号登录（OAuth）时才计入；用 API Key 调用是单独计费的，不算进来。判断时只读工具 `auth.json` 里的登录类型，不读 token。
+- **其他平台不算**：这些工具里调用 DeepSeek、Agnes 等其他平台的用量不计入。
+- **Claude 没有这个问题**：Anthropic 现在不让第三方工具用 Claude 订阅额度。第三方工具用 Claude 账号登录后，调用扣的是另外付费的「额外用量」（extra usage），不占 5 小时、每周额度；没开通额外用量时请求直接被拒绝。所以 Claude 的额度和统计只算 Claude Code 自己的调用。
+
+数据位置、去重规则和怎么支持新工具见 [Codex 说明](docs/providers/codex.md#第三方工具)。
 
 ## 下载安装
 
