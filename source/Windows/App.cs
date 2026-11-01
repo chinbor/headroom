@@ -17,7 +17,7 @@ using Drawing = System.Drawing;
 
 [assembly: AssemblyTitle("余量 Headroom")]
 [assembly: AssemblyDescription("A Windows taskbar monitor for AI subscription quotas and local token usage")]
-[assembly: AssemblyVersion("2.2.0.0")]
+[assembly: AssemblyVersion("2.2.1.0")]
 namespace Headroom {
     public static class Program {
         private static Mutex mutex;
