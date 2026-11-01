@@ -48,9 +48,14 @@ namespace Headroom {
             autoStart.Click += delegate { SetStartup(autoStart.IsChecked == true); };
             var prices = new CheckBox { IsChecked = config.PriceSync };
             prices.Click += delegate { config.PriceSync = prices.IsChecked == true; SaveConfig(); };
+            var updates = new CheckBox { IsChecked = config.UpdateCheck, IsEnabled = !demo };
+            updates.Click += delegate { config.UpdateCheck = updates.IsChecked == true; SaveConfig(); if (config.UpdateCheck) { nextUpdateCheck = DateTime.MinValue; var ignored = CheckAppUpdate(false); } };
+            var checkUpdate = Link("检查更新", () => { var ignored = CheckAppUpdate(true); }); checkUpdate.IsEnabled = !demo;
             root.Children.Add(Card("系统", null,
                 Row("开机启动", "登录 Windows 后在后台运行。", autoStart),
-                Row("同步官方价格表", "每天更新一次各模型的 API 价格，只用来折算费用。", prices)));
+                Row("同步官方价格表", "每天更新一次各模型的 API 价格，只用来折算费用。", prices),
+                Row("自动检查新版本", "启动时及运行期间每天检查 GitHub Release，不会自动安装。", updates),
+                Row("当前版本", AppInfo.Version + (demo ? " · 演示模式不联网" : " · 下载与安装需要手动确认"), checkUpdate)));
             var foot = Hint("Claude 和 Codex 的 token 与费用来自本机日志，费用按官方 API 价格折算，不是实际账单；DeepSeek、Agnes 在内置网页里登录后，程序读取网页的登录 token 来查额度和每日用量。所有凭据用 Windows 加密保存在本机，只发给对应平台的地址。");
             foot.Margin = new Thickness(4, 2, 4, 0); root.Children.Add(foot);
             RenderSubscriptionRows(); return root;

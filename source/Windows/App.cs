@@ -17,7 +17,7 @@ using Drawing = System.Drawing;
 
 [assembly: AssemblyTitle("余量 Headroom")]
 [assembly: AssemblyDescription("A Windows taskbar monitor for AI subscription quotas and local token usage")]
-[assembly: AssemblyVersion("2.1.1.0")]
+[assembly: AssemblyVersion("2.2.0.0")]
 namespace Headroom {
     public static class Program {
         private static Mutex mutex;
@@ -113,7 +113,7 @@ namespace Headroom {
             flyout = new TaskbarFlyout(SubscriptionStates, Icon);
             taskbarPanel.HoverStart += flyout.Hover; quotaDashboard.VisibilityChanged += flyout.Dismiss;
             // Every 30 s: the platforms that are due (Pacing.cs).
-            refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) }; refreshTimer.Tick += async delegate { await RefreshDue(); };
+            refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) }; refreshTimer.Tick += async delegate { await RefreshDue(); var ignored = CheckAppUpdate(false); };
         }
         private IEnumerable<string> EnabledIds() { return ProviderCatalog.All.Where(config.Enabled.Contains); }
         private List<ProviderState> SubscriptionStates() {
@@ -284,7 +284,7 @@ namespace Headroom {
             Render();
             if (!background) app.Dispatcher.BeginInvoke(new Action(ShowDashboard), DispatcherPriority.Background);
             if (demo) { NotifyAlerts(); return; }
-            WatchActivity(); refreshTimer.Start(); var a = Refresh(); var b = ScanHistory();
+            WatchActivity(); refreshTimer.Start(); var a = Refresh(); var b = ScanHistory(); var c = CheckAppUpdate(false);
         }
         private void SaveConfig() { try { Store.Write("settings.json", config); } catch { } }
         private async Task Refresh() {

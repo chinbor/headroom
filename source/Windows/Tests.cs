@@ -314,6 +314,21 @@ namespace Headroom {
                 try { CustomProviders.Map(ProviderCatalog.Custom["agnes"], J.Parse("{}"), DateTime.UtcNow); } catch (ProviderException) { rejected = true; }
                 Require(rejected);
             });
+            test("Release check accepts stable versions and safe official links", () => {
+                var release = AppUpdate.Parse(J.Parse("{\"tag_name\":\"v2.10.1\",\"body\":\"## 本版更新\\n- 修复\\n\\n## 下载\\n链接\",\"draft\":false,\"prerelease\":false}"));
+                Require(release.Version == "2.10.1" && release.Notes == "- 修复");
+                Require(AppUpdate.IsNewer(release.Version, "2.9.9") && !AppUpdate.IsNewer("2.1.1", "2.1.1") && !AppUpdate.IsNewer("bad", "2.1.1"));
+                Require(AppUpdate.ReleaseUrl(release) == "https://github.com/chinbor/headroom/releases/tag/v2.10.1");
+                byte[] payload = System.Text.Encoding.UTF8.GetBytes("abc");
+                string sum = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  headroom-setup-2.10.1.exe\n";
+                Require(AppUpdate.ValidChecksum(payload, sum, "headroom-setup-2.10.1.exe"));
+                Require(!AppUpdate.ValidChecksum(System.Text.Encoding.UTF8.GetBytes("bad"), sum, "headroom-setup-2.10.1.exe"));
+                Require(!AppUpdate.ValidChecksum(payload, sum, "headroom-setup-2.10.2.exe"));
+                foreach (string tag in new[] { "v2.1.1-rc1", "v2.1.1/evil", "v2.1", "v99999999999999999999.1.1" }) {
+                    bool rejected = false; try { AppUpdate.Parse(J.Parse("{\"tag_name\":\"" + tag + "\"}")); } catch (FormatException) { rejected = true; } Require(rejected);
+                }
+                bool draft = false; try { AppUpdate.Parse(J.Parse("{\"tag_name\":\"v2.1.2\",\"prerelease\":true}")); } catch (FormatException) { draft = true; } Require(draft);
+            });
             test("Taskbar gap shrinks or hides instead of overlapping occupied controls", () => {
                 var bar = new System.Windows.Rect(0, 1000, 1920, 48);
                 var occupied = new[] { new System.Windows.Rect(0, 1000, 1000, 48), new System.Windows.Rect(1620, 1000, 300, 48) };
