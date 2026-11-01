@@ -324,6 +324,8 @@ namespace Headroom {
                 Require(AppUpdate.ValidChecksum(payload, sum, "headroom-setup-2.10.1.exe"));
                 Require(!AppUpdate.ValidChecksum(System.Text.Encoding.UTF8.GetBytes("bad"), sum, "headroom-setup-2.10.1.exe"));
                 Require(!AppUpdate.ValidChecksum(payload, sum, "headroom-setup-2.10.2.exe"));
+                string setupArgs = AppUpdate.SetupArguments(Path.Combine(Path.GetTempPath(), "headroom-setup-2.10.1.exe"));
+                Require(setupArgs.Contains("/VERYSILENT") && setupArgs.Contains("/restart=1"));
                 foreach (string tag in new[] { "v2.1.1-rc1", "v2.1.1/evil", "v2.1", "v99999999999999999999.1.1" }) {
                     bool rejected = false; try { AppUpdate.Parse(J.Parse("{\"tag_name\":\"" + tag + "\"}")); } catch (FormatException) { rejected = true; } Require(rejected);
                 }
