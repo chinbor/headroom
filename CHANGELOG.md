@@ -2,6 +2,11 @@
 
 每个版本的这一节会写进 GitHub 发布说明的「本版更新」。1.0.2 及以前是上游 codeusagemonit 的记录。
 
+## 2.1.1
+
+- 修复微信截图结束或退出全屏后任务栏摘要消失、稍后才重新出现的问题。
+- 同步最新模型价格表。
+
 ## 2.1.0
 
 - 程序改名为 `headroom.exe`，安装包和压缩包改名为 `headroom-setup-<版本>.exe`、`headroom-<版本>-win-x64.zip`，数据目录改为 `%LOCALAPPDATA%\Headroom`，环境变量改为 `HEADROOM_DATA`。
