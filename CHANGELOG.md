@@ -2,6 +2,10 @@
 
 每个版本的这一节会写进 GitHub 发布说明的「本版更新」。1.0.2 及以前是上游 codeusagemonit 的记录。
 
+## 2.2.2
+
+- Codex 的 token 与费用统计计入 pi、opencode 等用 ChatGPT 账号登录的第三方工具调用 OpenAI 的用量（只在该工具为 ChatGPT 登录时计入，API Key 调用不计）。
+
 ## 2.2.1
 
 - 自动检查更新失败（如开机时网络未就绪）后 1 小时内重试，不再等一整天。
