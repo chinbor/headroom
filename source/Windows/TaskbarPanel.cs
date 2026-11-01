@@ -244,18 +244,21 @@ namespace Headroom {
             }
             return Rect.Empty;
         }
-        // Hide: a definite reason to take the summary off now (a full-screen window, the taskbar
-        // hidden); a null slot is a passing failure.
-        private sealed class Slot { public IntPtr Shell; public Rect Area; public bool Hide; }
+        // Hide: the taskbar is hidden; Preserve: a full-screen window covers it, so leave the
+        // existing host untouched. A null slot is a passing failure.
+        private sealed class Slot { public IntPtr Shell; public Rect Area; public bool Hide, Preserve; }
         private static Slot Locate() {
             IntPtr parent = FindWindow("Shell_TrayWnd", null); RECT native;
             if (parent == IntPtr.Zero) return null;
+            var screen = Forms.Screen.FromHandle(parent).Bounds;
+            // Windows places the taskbar behind full-screen windows. Keep its child intact even
+            // if Explorer temporarily hides the taskbar or UI Automation reports no controls.
+            // This also avoids flashing when a screenshot's frozen desktop is dismissed.
+            if (FullScreen(GetForegroundWindow(), screen)) return new Slot { Preserve = true };
             if (!IsWindowVisible(parent) || !GetWindowRect(parent, out native)) return new Slot { Hide = true };
             var bar = new Rect(native.Left, native.Top, native.Right - native.Left, native.Bottom - native.Top);
-            var screen = Forms.Screen.FromHandle(parent).Bounds;
             Rect visible = Rect.Intersect(bar, new Rect(screen.X, screen.Y, screen.Width, screen.Height));
             if (visible.IsEmpty || visible.Height < bar.Height - 2) return new Slot { Hide = true };   // auto-hide taskbar slid away
-            if (FullScreen(GetForegroundWindow(), screen)) return new Slot { Hide = true };
             var occupied = new List<Rect>(); IntPtr tray = FindWindowEx(parent, IntPtr.Zero, "TrayNotifyWnd", null); RECT tr;
             if (tray == IntPtr.Zero || !GetWindowRect(tray, out tr)) return null;
             occupied.Add(new Rect(tr.Left, tr.Top, tr.Right - tr.Left, tr.Bottom - tr.Top));
@@ -294,6 +297,7 @@ namespace Headroom {
                 Slot slot = await Task.Run(() => { try { return Locate(); } catch { return null; } });
                 if (disposed) return;
                 if (!Enabled) { RemoveHost(); return; }
+                if (slot != null && slot.Preserve) { misses = 0; return; }
                 if (slot == null && host != null && ++misses < MissesBeforeHiding) return;
                 if (slot == null || slot.Hide) { RemoveHost(); Note = slot == null ? "任务栏空间不足或当前布局不可用，可从托盘打开看板。" : ""; return; }
                 misses = 0;
