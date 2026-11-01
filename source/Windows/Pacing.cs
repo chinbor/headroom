@@ -27,7 +27,7 @@ namespace Headroom {
         // Folders whose files change while a platform's client is working.
         public static IEnumerable<string> ActivityFolders(string id) {
             switch (id) {
-                case "codex": return new[] { Path.Combine(ProviderService.CodexHome(), "sessions") };
+                case "codex": return new[] { Path.Combine(ProviderService.CodexHome(), "sessions") }.Concat(CodexClients.SignedIn().Select(c => c.Watch())).ToArray();
                 case "claude": return ClaudeLogs.ConfigDirs().Select(d => Path.Combine(d, "projects"));
                 case "deepseek": return new[] { Path.Combine(HarnessLogs.Root, "sessions") };
                 default: return new string[0];

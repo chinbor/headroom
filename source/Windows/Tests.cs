@@ -314,6 +314,25 @@ namespace Headroom {
                 try { CustomProviders.Map(ProviderCatalog.Custom["agnes"], J.Parse("{}"), DateTime.UtcNow); } catch (ProviderException) { rejected = true; }
                 Require(rejected);
             });
+            test("ChatGPT-login requests from pi and opencode count under Codex once", () => {
+                Pricing.EnsureLoaded();
+                var index = new LogIndex(); LogFile pi = new LogFile { Name = "pi|a" }, oc = new LogFile { Name = "opencode|database" }; index.Files.Add(pi); index.Files.Add(oc);
+                string line = "{\"type\":\"message\",\"id\":\"a1\",\"timestamp\":\"2026-11-01T09:31:12.736Z\",\"message\":{\"role\":\"assistant\",\"provider\":\"openai\",\"model\":\"gpt-6.1-terra\",\"responseId\":\"resp_1\",\"timestamp\":1793525466228,\"durationMs\":4000,\"usage\":{\"input\":1000,\"cacheRead\":500,\"cacheWrite\":0,\"output\":100}}}";
+                PiLogs.Line(index, pi, line); PiLogs.Line(index, pi, line); // a forked session repeats the entry
+                PiLogs.Line(index, pi, line.Replace("\"openai\"", "\"agnes\"").Replace("resp_1", "resp_2"));
+                OpenCodeLogs.Row(index, oc, "msg_1", "{\"role\":\"assistant\",\"providerID\":\"openai\",\"modelID\":\"gpt-6.1-terra\",\"tokens\":{\"input\":10,\"output\":5,\"reasoning\":3,\"cache\":{\"read\":20,\"write\":0}},\"time\":{\"created\":1793525466228,\"completed\":1793525468228}}");
+                OpenCodeLogs.Row(index, oc, "msg_2", "{\"role\":\"assistant\",\"providerID\":\"openai\",\"modelID\":\"gpt-6.1-terra\",\"tokens\":{\"input\":10,\"output\":5,\"cache\":{\"read\":0,\"write\":0}},\"time\":{\"created\":1793525466228}}");
+                index.InvalidateEntries(); List<HourUsage> hours = index.Entries();
+                Require(hours.All(h => h.Provider == CodexLogs.Official && h.Model == "gpt-6.1-terra") && Math.Abs(hours.Sum(h => h.Requests) - 2) < 1e-9);
+                Require(Math.Abs(hours.Sum(h => h.Input) - 1010) < 1e-9 && Math.Abs(hours.Sum(h => h.Cached) - 520) < 1e-9 && Math.Abs(hours.Sum(h => h.Output) - 108) < 1e-9 && Math.Abs(hours.Sum(h => h.TimedRequests) - 1) < 1e-9); // 8 output tokens are too few to time
+                string dir = Path.Combine(Path.GetTempPath(), "headroom-test-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
+                try {
+                    var client = new CodexClient { Name = "x", Auth = Path.Combine(dir, "auth.json") };
+                    Require(!client.SignedIn());
+                    File.WriteAllText(client.Auth, "{\"openai\":{\"type\":\"oauth\",\"access\":\"secret\"}}"); Require(client.SignedIn());
+                    File.WriteAllText(client.Auth, "{\"openai\":{\"type\":\"api\",\"key\":\"secret\"}}"); Require(!client.SignedIn());
+                } finally { try { Directory.Delete(dir, true); } catch { } }
+            });
             test("Release check accepts stable versions and safe official links", () => {
                 var release = AppUpdate.Parse(J.Parse("{\"tag_name\":\"v2.10.1\",\"body\":\"## 本版更新\\n- 修复\\n\\n## 下载\\n链接\",\"draft\":false,\"prerelease\":false}"));
                 Require(release.Version == "2.10.1" && release.Notes == "- 修复");

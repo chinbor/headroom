@@ -133,12 +133,14 @@ namespace Headroom {
             if (!continuous) index = new LogIndex { CoveredFrom = horizon.ToString("o"), Pricing = Pricing.Version };
             return index;
         }
-        public static LogIndex Scan(LogIndex index, IEnumerable<string> paths, Func<FileInfo, string> keyOf, DateTime nowUtc, Func<LogIndex, LogFile, string, Stream, long, long> read) {
+        public static LogIndex Scan(LogIndex index, IEnumerable<string> paths, Func<FileInfo, string> keyOf, DateTime nowUtc, Func<LogIndex, LogFile, string, Stream, long, long> read) { return Scan(index, paths, keyOf, nowUtc, read, null); }
+        // keep: states that are not files (a database read elsewhere) and stay even without usage.
+        public static LogIndex Scan(LogIndex index, IEnumerable<string> paths, Func<FileInfo, string> keyOf, DateTime nowUtc, Func<LogIndex, LogFile, string, Stream, long, long> read, IEnumerable<string> keep) {
             index = Fresh(index, nowUtc);
             DateTime horizon = nowUtc.AddDays(-HorizonDays);
             var byName = new Dictionary<string, LogFile>(StringComparer.OrdinalIgnoreCase);
             foreach (LogFile file in index.Files) byName[file.Name] = file;
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seen = new HashSet<string>(keep ?? new string[0], StringComparer.OrdinalIgnoreCase);
             foreach (string path in paths) {
                 FileInfo info;
                 try { info = new FileInfo(path); if (!info.Exists || info.LastWriteTimeUtc < horizon) continue; } catch { continue; }
@@ -267,8 +269,9 @@ namespace Headroom {
                 }
                 List<string> found; return sessions.TryGetValue(parentId, out found) ? found.FirstOrDefault(p => !String.Equals(p, context.Path, StringComparison.OrdinalIgnoreCase)) ?? "" : "";
             };
-            // Keyed by file name: archiving moves a rollout file without renaming it.
-            return LogReader.Scan(index, paths, info => info.Name, nowUtc, (idx, state, path, stream, offset) => Read(idx, state, path, stream, offset, context));
+            // Keyed by file name: archiving moves a rollout file without renaming it. Third-party
+            // clients on the same ChatGPT login are read alongside (CodexClients.cs).
+            return CodexClients.Scan(index, nowUtc, paths, (idx, state, path, stream, offset) => Read(idx, state, path, stream, offset, context));
         }
         private static bool FastByDefault() {
             try {
